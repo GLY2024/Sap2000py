@@ -1,0 +1,58 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv
+uv.lock
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# SAP2000 model artifacts produced by integration tests / examples
+*.sdb
+*.s2k
+*.$2k
+*.b2k
+*.LOG
+*.OUT
+*.K
+*.Y
+*.MTL
+*.TXA
+*.TXE
+*.TXK
+*.TXC
+*.OBK
+~SAP2000*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs build
+site/
+
+# comtypes generated cache (machine-specific, regenerated on first connect)
+src/sap2000py/_stubgen/_generated/
