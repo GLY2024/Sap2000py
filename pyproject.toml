@@ -1,0 +1,100 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sap2000py"
+version = "1.0.0a1"
+description = "A Pythonic SAP2000 OAPI wrapper for structural and bridge engineering."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+keywords = ["SAP2000", "OAPI", "structural-engineering", "bridge", "finite-element", "comtypes"]
+authors = [
+  { name = "Gou Lingyun", email = "gulangyu@tongji.edu.cn" },
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering",
+]
+
+# Core runtime dependencies. comtypes is the only OS-gated one: the pure-Python
+# computation modules (sections/fiber/optimize) import fine on any platform, so
+# the package itself stays importable on Linux for CI unit tests.
+dependencies = [
+  "comtypes>=1.4 ; platform_system == 'Windows'",
+  "numpy>=1.24",
+  "loguru>=0.7",
+]
+
+[project.urls]
+Homepage = "https://github.com/ganansuan647/Sap2000py"
+Repository = "https://github.com/ganansuan647/Sap2000py"
+Issues = "https://github.com/ganansuan647/Sap2000py/issues"
+
+[project.optional-dependencies]
+# Complex section geometry from DXF / shapely + gross section properties.
+sections = ["sectionproperties>=3.0", "shapely>=2.0", "ezdxf>=1.1"]
+# Fiber moment-curvature builds on top of section geometry.
+fiber = ["sap2000py[sections]"]
+# Bridge component library reads engineering parameters from YAML.
+bridge = ["pyyaml>=6.0"]
+# Tabular result export.
+tables = ["pandas>=2.0", "openpyxl>=3.1"]
+# Plotting (M-phi curves, yield surfaces, section previews).
+plot = ["matplotlib>=3.7"]
+# Parametric optimization backends.
+optimize = ["scipy>=1.10"]
+all = ["sap2000py[sections,fiber,bridge,tables,plot,optimize]"]
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "pytest-cov>=5",
+  "ruff>=0.8",
+  "mypy>=1.13",
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.26",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sap2000py"]
+
+# Ship the YAML parameter data and the generated native stub with the wheel.
+[tool.hatch.build.targets.wheel.force-include]
+"src/sap2000py/bridge/data" = "sap2000py/bridge/data"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "sap: integration tests that require a real local SAP2000 installation (run with --sap)",
+]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = ["legacy", "*.pyi"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "N", "RUF"]
+# COM/OAPI names are PascalCase by nature; allow them where we mirror the API.
+ignore = ["N802", "N803", "N806"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src/sap2000py"]
+exclude = ["legacy/", "_stubgen/"]
+
+[[tool.mypy.overrides]]
+module = ["comtypes.*", "sectionproperties.*", "shapely.*", "ezdxf.*", "scipy.*", "matplotlib.*"]
+ignore_missing_imports = true
