@@ -66,8 +66,7 @@ class SapApiError(SapError):
         self.args_passed = args
         self.code = code
         super().__init__(
-            f"OAPI call '{api_name}' returned non-zero status {code}. "
-            f"Arguments: {args!r}"
+            f"OAPI call '{api_name}' returned non-zero status {code}. Arguments: {args!r}"
         )
 
 

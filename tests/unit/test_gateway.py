@@ -32,6 +32,20 @@ def test_call_tuple_multi_out_returns_tuple() -> None:
     assert gateway().call(lambda: (1.0, 2.0, 3.0, 0), api_name="Coord") == (1.0, 2.0, 3.0)
 
 
+def test_call_list_return_is_handled_like_tuple() -> None:
+    # comtypes returns a LIST for methods with [in, out] params (AddCartesian).
+    assert gateway().call(lambda: ["1", 0], api_name="AddCartesian") == "1"
+
+
+def test_call_list_multi_out() -> None:
+    assert gateway().call(lambda: [1.0, 2.0, 3.0, 0], api_name="Coord") == (1.0, 2.0, 3.0)
+
+
+def test_call_list_nonzero_status_raises() -> None:
+    with pytest.raises(SapApiError):
+        gateway().call(lambda: ["1", 1], api_name="AddCartesian")
+
+
 def test_call_tuple_nonzero_status_raises() -> None:
     with pytest.raises(SapApiError):
         gateway().call(lambda: ("x", 7), api_name="Add")

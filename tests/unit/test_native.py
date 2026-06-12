@@ -19,6 +19,12 @@ def test_proxy_bare_value_returned_as_is(make_proxy) -> None:
     assert api.PointObj.Count() == 5
 
 
+def test_proxy_list_return_unpacks_out_param(make_proxy) -> None:
+    # comtypes hands [in, out] methods back as a list; the proxy must unpack it.
+    api, _ = make_proxy({"PointObj.AddCartesian": ["1", 0]})
+    assert api.PointObj.AddCartesian(0.0, 0.0, 0.0, "", "", "Global", False, 0) == "1"
+
+
 def test_proxy_tuple_status_checked(make_proxy) -> None:
     api, _ = make_proxy({"FrameObj.SetSection": ("bad", 1)})
     with pytest.raises(SapApiError):

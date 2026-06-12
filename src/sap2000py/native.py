@@ -58,6 +58,7 @@ class NativeApi:
         full = f"{self._path}.{name}" if self._path else name
 
         if callable(attr):
+
             def _call(*args: Any, _func: Any = attr, _name: str = full) -> Any:
                 return self._gateway.auto(_func, *args, api_name=_name)
 

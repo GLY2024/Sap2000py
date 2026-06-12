@@ -18,8 +18,14 @@ Every OAPI function returns a ``long`` status as its *last* value, with any
 * a bare scalar — when the function has no out-params (the scalar is *either*
   the status, *or*, for a handful of functions like ``Count()`` and
   ``GetPresentUnits()``, a direct value with no status at all); or
-* a tuple ``(out_1, ..., out_n, status)`` — in which case the **last element
+* a sequence ``(out_1, ..., out_n, status)`` — in which case the **last element
   is always the status** (this is unambiguous).
+
+  comtypes returns this sequence as a **list** for methods with ``[in, out]``
+  parameters (it routes them through its ``_fix_inout_args`` wrapper) and as a
+  **tuple** for methods with only pure ``[out]`` parameters. The gateway treats
+  both identically — a real-machine difference that unit tests with a fake COM
+  cannot surface, caught by the integration smoke test.
 
 Because a bare scalar is ambiguous, the typed ``model`` layer picks the right
 method explicitly:
@@ -59,8 +65,14 @@ class ErrorPolicy(Enum):
     WARN = "warn"
 
 
+def _split_status(result: list[Any] | tuple[Any, ...]) -> tuple[tuple[Any, ...], int]:
+    """Split a comtypes sequence return into ``(out_params, status)``."""
+    *outs, code = result
+    return tuple(outs), int(code)
+
+
 def _unpack(outs: tuple[Any, ...]) -> Any:
-    """Collapse a tuple of out-parameters to the friendliest Python value."""
+    """Collapse out-parameters to the friendliest Python value."""
     if not outs:
         return None
     if len(outs) == 1:
@@ -118,10 +130,10 @@ class ComGateway:
         policy is :attr:`ErrorPolicy.WARN`).
         """
         result = self._invoke(com_func, args, api_name)
-        if isinstance(result, tuple):
-            *outs, code = result
-            self._check(int(code), api_name, args)
-            return _unpack(tuple(outs))
+        if isinstance(result, (list, tuple)):
+            outs, code = _split_status(result)
+            self._check(code, api_name, args)
+            return _unpack(outs)
         # Bare scalar: the typed layer only routes genuine status returns here.
         self._check(int(result), api_name, args)
         return None
@@ -134,10 +146,10 @@ class ComGateway:
         and the out-parameters are returned.
         """
         result = self._invoke(com_func, args, api_name)
-        if isinstance(result, tuple):
-            *outs, code = result
-            self._check(int(code), api_name, args)
-            return _unpack(tuple(outs))
+        if isinstance(result, (list, tuple)):
+            outs, code = _split_status(result)
+            self._check(code, api_name, args)
+            return _unpack(outs)
         return result
 
     def auto(self, com_func: Callable[..., Any], *args: Any, api_name: str = "") -> Any:
@@ -148,8 +160,8 @@ class ComGateway:
         never misread a real value as a failure).
         """
         result = self._invoke(com_func, args, api_name)
-        if isinstance(result, tuple):
-            *outs, code = result
-            self._check(int(code), api_name, args)
-            return _unpack(tuple(outs))
+        if isinstance(result, (list, tuple)):
+            outs, code = _split_status(result)
+            self._check(code, api_name, args)
+            return _unpack(outs)
         return result

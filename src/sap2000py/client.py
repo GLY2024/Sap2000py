@@ -175,9 +175,7 @@ class SapClient:
             self.model.files.save(save)
         if self._owns_process:
             try:
-                self._gateway.call(
-                    self._object.ApplicationExit, False, api_name="ApplicationExit"
-                )
+                self._gateway.call(self._object.ApplicationExit, False, api_name="ApplicationExit")
             except Exception as exc:
                 logger.warning("ApplicationExit failed during close: {}", exc)
         self._closed = True

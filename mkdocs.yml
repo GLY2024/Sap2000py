@@ -1,0 +1,49 @@
+site_name: Sap2000py
+site_description: A Pythonic SAP2000 OAPI wrapper for structural and bridge engineering.
+repo_url: https://github.com/ganansuan647/Sap2000py
+repo_name: ganansuan647/Sap2000py
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Migration from v0: migration-from-v0.md
+  - Guides:
+      - Units: guides/units.md
+      - The native API escape hatch: guides/native-api.md
+      - Bridge components: guides/bridge.md
+      - Fiber moment-curvature: guides/fiber.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_source: false
+            members_order: source
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - toc:
+      permalink: true

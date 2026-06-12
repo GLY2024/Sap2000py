@@ -57,8 +57,10 @@ def _sub_objects(model: Any) -> dict[str, Any]:
             attr = getattr(model, name)
         except Exception:
             continue
-        if attr is not None and not callable(attr) and not isinstance(
-            attr, (int, float, str, bool, bytes, tuple, list, dict)
+        if (
+            attr is not None
+            and not callable(attr)
+            and not isinstance(attr, (int, float, str, bool, bytes, tuple, list, dict))
         ):
             subs[name] = attr
     return subs
