@@ -73,6 +73,22 @@ class MatType(IntEnum):
     MASONRY = 8
 
 
+class LoadPatternType(IntEnum):
+    """SAP2000 ``eLoadPatternType`` — the common load-pattern types."""
+
+    DEAD = 1
+    SUPER_DEAD = 2
+    LIVE = 3
+    REDUCE_LIVE = 4
+    QUAKE = 5
+    WIND = 6
+    SNOW = 7
+    OTHER = 8
+    MOVE = 9
+    TEMPERATURE = 10
+    PRESTRESS = 12
+
+
 def dof_mask(names: Iterable[str]) -> list[bool]:
     """Convert DOF names to the 6-element boolean mask the OAPI expects.
 

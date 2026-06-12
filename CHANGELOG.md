@@ -25,9 +25,25 @@ The frozen `0.1.3` sources remain available under `legacy/` and at the
 - `client.api` — a thin dynamic proxy (`NativeApi`) exposing the *entire*
   OAPI with centralized error handling, for any method not yet wrapped.
 - `client.model` — a hand-written, typed domain facade for the high-frequency
-  API (files, points, frames, materials, sections, loads, analysis, results).
+  API:
+  - `files` (new/open/save), `points` (add/restrain/query),
+    `materials` (code-based + isotropic, incl. the Chinese-code library ported
+    from the old `Common_Material_Set`), `frame_sections`
+    (rectangle/circle/general/modifiers), `frames`
+    (add/section/releases/local-axes/output-stations/grouping), `groups`,
+    `loads` (patterns + cases, collapsing the old 13 `load_*` classes into
+    parameterized methods), `analysis` (run-flags/run/status), and `results`.
+  - `ResultTable` — column-oriented results with `.rows()` and an optional
+    `.to_pandas()` (behind the `tables` extra).
 - `Units` enum + `model.units(...)` restoring context manager.
-- Optional modules behind extras: `sections`, `fiber`, `yield_surface`,
+- `sap2000py.fiber` — fiber moment-curvature analysis (pure NumPy, no COM):
+  `ManderConcrete` (confined/unconfined) and `BilinearSteel` constitutive
+  models, `FiberSection` discretization, and a `moment_curvature` solver with
+  equal-energy `bilinearize()`. Verified against the analytical elastic `E·I`
+  solution.
+- `sap2000py.yield_surface` — `pm_interaction` axial-moment interaction
+  envelopes built on fiber sections.
+- Remaining optional modules behind extras: `sections` (DXF/shapely geometry),
   `optimize`, and a redesigned `bridge` component library.
 
 ### Removed

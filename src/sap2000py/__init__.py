@@ -13,7 +13,16 @@ SAP2000. Create a connection explicitly::
 from __future__ import annotations
 
 from .client import SapClient
-from .enums import DOF, DOF_NAMES, ItemType, ItemTypeElm, MatType, Units, dof_mask
+from .enums import (
+    DOF,
+    DOF_NAMES,
+    ItemType,
+    ItemTypeElm,
+    LoadPatternType,
+    MatType,
+    Units,
+    dof_mask,
+)
 from .errors import (
     MissingDependencyError,
     SapAnalysisError,
@@ -39,6 +48,8 @@ from .handles import (
     SolidHandle,
     TendonHandle,
 )
+from .model.analysis import AnalysisReport
+from .model.results import ResultTable
 
 __version__ = "1.0.0a1"
 
@@ -52,9 +63,13 @@ __all__ = [  # noqa: RUF022 - grouped by category for readability, not sorted
     "ItemType",
     "ItemTypeElm",
     "MatType",
+    "LoadPatternType",
     "DOF",
     "DOF_NAMES",
     "dof_mask",
+    # results
+    "ResultTable",
+    "AnalysisReport",
     # errors
     "SapError",
     "SapConnectionError",

@@ -13,8 +13,15 @@ from typing import Any
 
 from ..enums import Units
 from ..gateway import ComGateway
+from .analysis import Analysis
 from .files import Files
+from .frame_sections import FrameSections
+from .frames import Frames
+from .groups import Groups
+from .loads import Loads
+from .materials import Materials
 from .points import Points
+from .results import Results
 
 __all__ = ["Model"]
 
@@ -32,8 +39,13 @@ class Model:
         self._g = gateway
         self.files = Files(self)
         self.points = Points(self)
-        # M2 adds: frames, materials, frame_sections, link_props, links,
-        # constraints, groups, loads, analysis, results.
+        self.materials = Materials(self)
+        self.frame_sections = FrameSections(self)
+        self.frames = Frames(self)
+        self.groups = Groups(self)
+        self.loads = Loads(self)
+        self.analysis = Analysis(self)
+        self.results = Results(self)
 
     @property
     def gateway(self) -> ComGateway:

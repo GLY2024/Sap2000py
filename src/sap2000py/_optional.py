@@ -8,11 +8,12 @@ a bare ``ModuleNotFoundError``.
 from __future__ import annotations
 
 import importlib
+from typing import Any
 
 from .errors import MissingDependencyError
 
 
-def require(module: str, *, feature: str, extra: str) -> object:
+def require(module: str, *, feature: str, extra: str) -> Any:
     """Import and return ``module``, or raise :class:`MissingDependencyError`.
 
     Parameters
