@@ -27,6 +27,8 @@ class Points(Manager):
     ) -> PointHandle:
         """Add a point at Cartesian ``(x, y, z)`` in the current length unit.
 
+        Wraps ``PointObj.AddCartesian``.
+
         Parameters
         ----------
         name:
@@ -35,8 +37,11 @@ class Points(Manager):
             When ``True`` (default), a point added at an existing point's
             location is merged into it.
 
-        Returns the handle of the point that now exists at that location (which,
-        when merged, is the pre-existing point). Wraps ``PointObj.AddCartesian``.
+        Returns
+        -------
+        PointHandle
+            The point that now exists at that location — the pre-existing point
+            when merged.
         """
         # AddCartesian(X, Y, Z, Name[in,out], UserName, CSys, MergeOff, MergeNumber)
         assigned = self._g.call(

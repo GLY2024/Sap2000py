@@ -57,8 +57,11 @@ def pm_interaction(
     n_points:
         Number of strain profiles swept from pure compression to full tension.
 
-    Returns the envelope as paired axial/moment arrays. Axial is tension-positive
-    (so compression capacities are negative).
+    Returns
+    -------
+    PMInteraction
+        The envelope as paired axial/moment arrays. Axial is tension-positive,
+        so compression capacities are negative.
     """
     y = section.y
     if len(y) == 0:

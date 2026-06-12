@@ -79,6 +79,26 @@ SAP2000 itself must be installed locally; the COM API is Windows-only.
 | `sap2000py.optimize` | Parametric studies / optimization |
 | `sap2000py.bridge` | Bridge components, auto-connection, and systems |
 
+## Documentation
+
+The docs are a MkDocs (Material) site under [`docs/`](docs/) with API reference
+auto-generated from docstrings via mkdocstrings. They are wired to deploy two
+ways out of the box:
+
+- **GitHub Pages** — the [`Docs` workflow](.github/workflows/docs.yml) builds
+  and publishes on every push to `main` (enable Pages → "GitHub Actions" in repo
+  settings).
+- **Read the Docs** — [`.readthedocs.yaml`](.readthedocs.yaml) builds the same
+  site; just import the repo on readthedocs.org.
+
+Build and preview locally:
+
+```bash
+uv sync --extra docs
+uv run mkdocs serve        # live preview at http://127.0.0.1:8000
+uv run mkdocs build --strict
+```
+
 ## Development
 
 ```bash

@@ -115,6 +115,8 @@ def moment_curvature(
     n_steps:
         Number of curvature increments from 0 to ``max_curvature``.
 
+    Notes
+    -----
     The analysis stops early (truncating the curve) if a curvature cannot be
     equilibrated — typically because the section has failed.
     """

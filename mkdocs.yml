@@ -25,11 +25,23 @@ nav:
   - Home: index.md
   - Quickstart: quickstart.md
   - Migration from v0: migration-from-v0.md
+  - Architecture: architecture.md
   - Guides:
+      - Connecting to SAP2000: guides/connecting.md
+      - Building and analyzing models: guides/building-models.md
       - Units: guides/units.md
       - The native API escape hatch: guides/native-api.md
-      - Bridge components: guides/bridge.md
       - Fiber moment-curvature: guides/fiber.md
+      - Bridge components: guides/bridge.md
+  - API reference:
+      - Client & connection: reference/client.md
+      - Model: reference/model.md
+      - Native API & gateway: reference/native.md
+      - Errors: reference/errors.md
+      - Enums & values: reference/enums.md
+      - Handles: reference/handles.md
+      - Fiber: reference/fiber.md
+      - Yield surface: reference/yield-surface.md
 
 plugins:
   - search
