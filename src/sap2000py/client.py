@@ -168,16 +168,21 @@ class SapClient:
 
         Only a launched instance's process is exited; an attached instance is
         left running (we just drop our references).
+
+        If exiting an owned process fails, the failure is **raised** and the
+        client is left open and retryable — a swallowed exit can leave a hidden
+        SAP2000 process or license alive while the caller believes cleanup
+        succeeded. The client is marked closed only once the process is known
+        gone, so a later ``close()`` can retry rather than silently no-op.
         """
         if self._closed:
             return
         if save is not None:
             self.model.files.save(save)
         if self._owns_process:
-            try:
-                self._gateway.call(self._object.ApplicationExit, False, api_name="ApplicationExit")
-            except Exception as exc:
-                logger.warning("ApplicationExit failed during close: {}", exc)
+            # Mark closed only after a successful exit: a failed ApplicationExit
+            # must stay observable and retryable, not become a silent no-op.
+            self._gateway.call(self._object.ApplicationExit, False, api_name="ApplicationExit")
         self._closed = True
 
     def __enter__(self) -> SapClient:
@@ -190,5 +195,13 @@ class SapClient:
         tb: TracebackType | None,
     ) -> None:
         # Only tear down processes we started; attached instances stay alive.
-        if self._owns_process:
+        if not self._owns_process:
+            return
+        try:
             self.close()
+        except Exception as cleanup_exc:
+            # Never let a teardown failure mask an exception from the with-body;
+            # surface it only when the body left cleanly.
+            if exc is None:
+                raise
+            logger.warning("ApplicationExit failed during context exit: {}", cleanup_exc)

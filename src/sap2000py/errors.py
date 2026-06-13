@@ -61,13 +61,15 @@ class SapApiError(SapError):
     turns every non-zero status into this exception.
     """
 
-    def __init__(self, api_name: str, args: tuple[Any, ...], code: int) -> None:
+    def __init__(self, api_name: str, args: tuple[Any, ...], code: int, hint: str = "") -> None:
         self.api_name = api_name
         self.args_passed = args
         self.code = code
-        super().__init__(
-            f"OAPI call '{api_name}' returned non-zero status {code}. Arguments: {args!r}"
-        )
+        self.hint = hint
+        message = f"OAPI call '{api_name}' returned non-zero status {code}. Arguments: {args!r}"
+        if hint:
+            message = f"{message}\n{hint}"
+        super().__init__(message)
 
 
 class SapModelLockedError(SapApiError):

@@ -51,6 +51,27 @@ into sub-managers, each documented below.
       show_root_heading: true
       heading_level: 3
 
+## Constraints
+
+::: sap2000py.model.constraints.Constraints
+    options:
+      show_root_heading: true
+      heading_level: 3
+
+## Link properties
+
+::: sap2000py.model.link_props.LinkProps
+    options:
+      show_root_heading: true
+      heading_level: 3
+
+## Links
+
+::: sap2000py.model.links.Links
+    options:
+      show_root_heading: true
+      heading_level: 3
+
 ## Loads
 
 ::: sap2000py.model.loads.Loads

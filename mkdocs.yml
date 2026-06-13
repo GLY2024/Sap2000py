@@ -30,6 +30,7 @@ nav:
       - Connecting to SAP2000: guides/connecting.md
       - Building and analyzing models: guides/building-models.md
       - Units: guides/units.md
+      - Static checking & IDE completion: guides/typing.md
       - The native API escape hatch: guides/native-api.md
       - Fiber moment-curvature: guides/fiber.md
       - Bridge components: guides/bridge.md
@@ -42,6 +43,7 @@ nav:
       - Handles: reference/handles.md
       - Fiber: reference/fiber.md
       - Yield surface: reference/yield-surface.md
+      - Bridge: reference/bridge.md
 
 plugins:
   - search

@@ -106,6 +106,57 @@ class Points(Manager):
             api_name="PointObj.SetRestraint",
         )
 
+    def set_spring(
+        self,
+        point: PointHandle | str,
+        stiffness: Sequence[float],
+        *,
+        local_csys: bool = False,
+        replace: bool = True,
+        item_type: ItemType = ItemType.OBJECT,
+    ) -> None:
+        """Assign six uncoupled spring stiffnesses ``[U1, U2, U3, R1, R2, R3]``.
+
+        Wraps ``PointObj.SetSpring``. Use this for an elastic foundation: a
+        diagonal 6-DOF support whose stiffnesses are in the current force/length
+        units.
+        """
+        if len(stiffness) != 6:
+            raise ValueError(f"stiffness must have 6 elements [U1..R3], got {len(stiffness)}.")
+        # SetSpring(Name, Value[6], ItemType, IsLocalCSys, Replace)
+        self._g.call(
+            self._raw.PointObj.SetSpring,
+            as_name(point),
+            [float(k) for k in stiffness],
+            int(item_type),
+            local_csys,
+            replace,
+            api_name="PointObj.SetSpring",
+        )
+
+    def set_constraint(
+        self,
+        point: PointHandle | str,
+        constraint: str,
+        *,
+        replace: bool = False,
+        item_type: ItemType = ItemType.OBJECT,
+    ) -> None:
+        """Assign ``point`` to a named joint constraint. Wraps ``PointObj.SetConstraint``.
+
+        Define the constraint first with :class:`~sap2000py.model.constraints.Constraints`
+        (``model.constraints.add_body(...)`` / ``add_equal(...)``).
+        """
+        # SetConstraint(Name, ConstraintName, ItemType, Replace)
+        self._g.call(
+            self._raw.PointObj.SetConstraint,
+            as_name(point),
+            constraint,
+            int(item_type),
+            replace,
+            api_name="PointObj.SetConstraint",
+        )
+
     def delete(self, point: PointHandle | str, *, item_type: ItemType = ItemType.OBJECT) -> None:
         """Delete a point object. Wraps ``PointObj.Delete``."""
         self._g.call(

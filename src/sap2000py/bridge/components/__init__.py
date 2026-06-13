@@ -1,4 +1,14 @@
-"""Bridge components (piers, girders, bearings, foundations).
+"""Bridge components: piers, girders, bearings, foundations.
 
-Implemented in milestone M4.
+Each is a :class:`~sap2000py.bridge.component.BridgeComponent` — pure data until
+``build(model)`` creates its objects and registers its connection anchors.
 """
+
+from __future__ import annotations
+
+from .bearing import Bearing
+from .foundation import Foundation
+from .girder import Girder
+from .pier import Pier
+
+__all__ = ["Bearing", "Foundation", "Girder", "Pier"]

@@ -31,6 +31,19 @@ def test_proxy_tuple_status_checked(make_proxy) -> None:
         api.FrameObj.SetSection("F1", "SEC")
 
 
+def test_proxy_status_only_failure_raises(make_proxy) -> None:
+    # A status-only mutation (no out-params) that fails must raise through the
+    # proxy, not return the non-zero status as if it were a value.
+    api, _ = make_proxy({"File.Save": 1})
+    with pytest.raises(SapApiError):
+        api.File.Save("model.sdb")
+
+
+def test_proxy_status_only_success_returns_zero(make_proxy) -> None:
+    api, _ = make_proxy({"Analyze.RunAnalysis": 0})
+    assert api.Analyze.RunAnalysis() == 0
+
+
 def test_proxy_private_attr_raises_attributeerror(make_proxy) -> None:
     api, _ = make_proxy({})
     with pytest.raises(AttributeError):

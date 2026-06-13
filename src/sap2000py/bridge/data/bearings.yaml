@@ -1,0 +1,18 @@
+# Linear bearing effective stiffness presets.
+#
+# Each entry's `stiffness` is the six-DOF [U1, U2, U3, R1, R2, R3] effective
+# stiffness of a linear link, in the model's current force/length units
+# (e.g. kN/m for translations, kN*m/rad for rotations). These are illustrative
+# engineering defaults — always confirm against the bearing's product data.
+elastomeric_pad:
+  description: Laminated elastomeric pad bearing, movable in plane.
+  stiffness: [2.0e5, 2.0e5, 2.0e9, 0.0, 0.0, 0.0]
+pot_fixed:
+  description: Pot bearing fixed in plane (transfers horizontal load).
+  stiffness: [1.0e9, 1.0e9, 2.0e10, 0.0, 0.0, 0.0]
+pot_guided:
+  description: Pot bearing guided free along the bridge axis (U1).
+  stiffness: [0.0, 1.0e9, 2.0e10, 0.0, 0.0, 0.0]
+spherical_fixed:
+  description: Spherical (PTFE) bearing fixed in plane.
+  stiffness: [5.0e8, 5.0e8, 1.0e10, 0.0, 0.0, 0.0]

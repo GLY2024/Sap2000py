@@ -60,13 +60,47 @@ def test_value_tuple_unpacks_and_checks() -> None:
     assert gateway().value(lambda: (42, 0), api_name="GetThing") == 42
 
 
-def test_auto_bare_returns_as_is() -> None:
+def test_auto_value_getter_bare_returns_value() -> None:
+    # A leaf name in the value-getter set: the bare int is data, not a status.
     assert gateway().auto(lambda: 6, api_name="GetPresentUnits") == 6
+    assert gateway().auto(lambda: 5, api_name="PointObj.Count") == 5
+    # Even a zero from a value-getter is the value, returned unchecked.
+    assert gateway().auto(lambda: 0, api_name="PointObj.Count") == 0
 
 
 def test_auto_tuple_checks_status() -> None:
     with pytest.raises(SapApiError):
         gateway().auto(lambda: ("n", 1), api_name="Proxy")
+
+
+def test_auto_bare_int_nonzero_status_raises() -> None:
+    # The no-ship fix: a failed status-only mutation must not be silently dropped.
+    with pytest.raises(SapApiError) as info:
+        gateway().auto(lambda: 1, api_name="File.Save")
+    assert info.value.code == 1
+    assert "raw_model" in str(info.value)  # self-diagnosing hint
+
+
+def test_auto_bare_int_zero_status_returns_zero_not_none() -> None:
+    # Returning the int (not None) keeps ported `if ret != 0` guards valid.
+    assert gateway().auto(lambda: 0, api_name="File.Save") == 0
+
+
+def test_auto_bare_bool_passes_through() -> None:
+    # bool is checked before int: GetResultsAvailable()==True is not "status 1".
+    assert gateway().auto(lambda: True, api_name="DesignSteel.GetResultsAvailable") is True
+    assert gateway().auto(lambda: False, api_name="GetModelIsLocked") is False
+
+
+def test_auto_bare_str_and_float_pass_through() -> None:
+    assert gateway().auto(lambda: "Global", api_name="GetPresentCoordSystem") == "Global"
+    assert gateway().auto(lambda: 1.25, api_name="GetOAPIVersionNumber") == 1.25
+
+
+def test_auto_warn_policy_returns_status_int() -> None:
+    gw = ComGateway(sap_model=object(), policy=ErrorPolicy.WARN)
+    # Under WARN the non-zero status is logged, not raised, and still returned.
+    assert gw.auto(lambda: 2, api_name="File.Save") == 2
 
 
 def test_warn_policy_does_not_raise() -> None:

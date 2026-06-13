@@ -14,10 +14,13 @@ from typing import Any
 from ..enums import Units
 from ..gateway import ComGateway
 from .analysis import Analysis
+from .constraints import Constraints
 from .files import Files
 from .frame_sections import FrameSections
 from .frames import Frames
 from .groups import Groups
+from .link_props import LinkProps
+from .links import Links
 from .loads import Loads
 from .materials import Materials
 from .points import Points
@@ -42,6 +45,9 @@ class Model:
         self.materials = Materials(self)
         self.frame_sections = FrameSections(self)
         self.frames = Frames(self)
+        self.constraints = Constraints(self)
+        self.link_props = LinkProps(self)
+        self.links = Links(self)
         self.groups = Groups(self)
         self.loads = Loads(self)
         self.analysis = Analysis(self)

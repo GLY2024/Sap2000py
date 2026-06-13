@@ -34,8 +34,22 @@ method explicitly:
 * :meth:`ComGateway.value` — direct-value semantics; never interprets a status.
 
 The dynamic :class:`~sap2000py.native.NativeApi` proxy, which has no per-method
-knowledge, uses :meth:`ComGateway.auto`: check+unpack tuples, return bare
-scalars as-is (the safe default — never misread a real value as a failure).
+knowledge, uses :meth:`ComGateway.auto`. It cannot read a method's intent, so it
+classifies the bare-scalar return *structurally*:
+
+* a sequence is unambiguous — check the trailing status, return the out-params;
+* a bare **non-integer** (``str``/``float``/``None`` — and ``bool``, which the
+  OAPI never uses for a status) can't be a status, so it passes through;
+* a bare **integer** is treated as an action status (raise on non-zero) *unless*
+  its leaf name is in :data:`_VALUE_GETTERS`, a curated set of the only OAPI
+  methods whose bare-``long`` return is a value rather than a status.
+
+This defaults to the *safe* direction: a failed mutation through the escape hatch
+(``client.api.File.Save(...)``) raises instead of being silently dropped. The set
+was enumerated against the real SAP2000 type library — every other bare-``long``
+return is an action status — so a value-getter wrongly treated as a status is
+both rare and *loud* (it raises with a hint to use ``client.raw_model``), never a
+silent wrong value.
 """
 
 from __future__ import annotations
@@ -63,6 +77,33 @@ class ErrorPolicy(Enum):
 
     RAISE = "raise"
     WARN = "warn"
+
+
+#: Leaf method names whose bare-``long`` comtypes return is a direct *value*, not
+#: a status code — every other bare-``long`` return is an action status. Keyed by
+#: leaf name only, which is collision-free (no interface reuses these names for a
+#: status method). :meth:`ComGateway.auto` consults this set so the dynamic proxy
+#: doesn't misread e.g. ``PointObj.Count() == 5`` as "failed status 5". A name not
+#: in the set defaults to *status* (the loud, safe direction): a missing value
+#: getter raises with a hint, never returns a silently-wrong value. The
+#: ``Count*`` names were confirmed against the live OAPI by
+#: ``sap2000py._stubgen.audit_value_getters``, which flags any new ones on a
+#: SAP2000 upgrade so this set stays complete.
+_VALUE_GETTERS = frozenset(
+    {
+        "Count",
+        "CountCase",
+        "CountConstraint",
+        "CountLoadDispl",
+        "CountLoadForce",
+        "CountPanelZone",
+        "CountPoint",
+        "CountRestraint",
+        "CountSpring",
+        "GetDatabaseUnits",
+        "GetPresentUnits",
+    }
+)
 
 
 def _split_status(result: list[Any] | tuple[Any, ...]) -> tuple[tuple[Any, ...], int]:
@@ -111,10 +152,10 @@ class ComGateway:
             hresult = getattr(exc, "hresult", None)
             raise SapComError(api_name, args, hresult=hresult) from exc
 
-    def _check(self, code: int, api_name: str, args: tuple[Any, ...]) -> None:
+    def _check(self, code: int, api_name: str, args: tuple[Any, ...], hint: str = "") -> None:
         if code == 0:
             return
-        error = SapApiError(api_name, args, code)
+        error = SapApiError(api_name, args, code, hint=hint)
         if self.policy is ErrorPolicy.RAISE:
             raise error
         logger.warning("{}", error)
@@ -153,15 +194,35 @@ class ComGateway:
         return result
 
     def auto(self, com_func: Callable[..., Any], *args: Any, api_name: str = "") -> Any:
-        """Best-effort call for the dynamic proxy with no per-method knowledge.
+        """Call for the dynamic proxy, classifying the return structurally.
 
-        Tuple result: check the trailing status and return the out-parameters.
-        Bare scalar: return it unchanged (could be a status *or* a value; we
-        never misread a real value as a failure).
+        * Sequence result — check the trailing status, return the out-params.
+        * Bare non-integer (``str``/``float``/``None``/``bool``) — a value;
+          returned unchanged (the OAPI never encodes a status this way).
+        * Bare integer — an action status by default: checked (raising on
+          non-zero) and returned so raw-OAPI ``if ret != 0`` guards stay valid.
+          The exception is a leaf name in :data:`_VALUE_GETTERS`, whose bare
+          integer is a real value and is returned unchecked.
+
+        Defaulting a bare integer to *status* is what stops a failed mutation
+        through ``client.api`` (``File.Save``, ``RunAnalysis``, ...) from being
+        silently dropped.
         """
         result = self._invoke(com_func, args, api_name)
         if isinstance(result, (list, tuple)):
             outs, code = _split_status(result)
             self._check(code, api_name, args)
             return _unpack(outs)
+        # A status is always an integer; bool/str/float/None never are.
+        if isinstance(result, bool) or not isinstance(result, int):
+            return result
+        leaf = api_name.rsplit(".", 1)[-1]
+        if leaf in _VALUE_GETTERS:
+            return result
+        hint = (
+            f"If '{api_name}' returns a value rather than a status, call it via "
+            "client.raw_model (the unchecked escape hatch) and report it so its "
+            "name can be added to the gateway's value-getter set."
+        )
+        self._check(result, api_name, args, hint=hint)
         return result

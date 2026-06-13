@@ -55,6 +55,12 @@ name = client.api.PointObj.AddCartesian(0, 0, 0)   # raw OAPI, return code check
 raw = client.raw_model                              # ultimate escape hatch
 ```
 
+The package is fully typed and ships a [PEP 561](https://peps.python.org/pep-0561/)
+`py.typed` marker, so mypy/Pyright check your code and editors autocomplete
+methods, handles, and enums (the selectable `Units`, `ItemType`, ...) — including
+a generated stub for the dynamic `client.api` proxy. See the
+[typing guide](docs/guides/typing.md).
+
 ## Installation
 
 ```bash

@@ -1,0 +1,9 @@
+# A 3 x 40 m continuous girder bridge on pot bearings and fixed foundations.
+# Stiffnesses are in kN, m (the model is built in Units.KN_M_C).
+spans: [40, 40, 40]
+pier_height: 12.0
+pier_segments: 4
+girder_section: Girder
+pier_section: Pier
+bearing_stiffness: [1.0e9, 1.0e9, 2.0e10, 0.0, 0.0, 0.0]
+foundation: fixed
