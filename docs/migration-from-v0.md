@@ -9,7 +9,7 @@ If you are not ready to migrate, pin the old release or use the frozen tag:
 ```bash
 pip install "sap2000py==0.1.3"
 # or, during migration, reference the frozen snapshot:
-pip install "git+https://github.com/ganansuan647/Sap2000py@v0.1.3-legacy"
+pip install "git+https://github.com/GLY2024/Sap2000py@v0.1.3-legacy"
 ```
 
 ## The big change: no more singleton

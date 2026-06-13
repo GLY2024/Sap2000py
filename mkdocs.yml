@@ -1,7 +1,7 @@
 site_name: Sap2000py
 site_description: A Pythonic SAP2000 OAPI wrapper for structural and bridge engineering.
-repo_url: https://github.com/ganansuan647/Sap2000py
-repo_name: ganansuan647/Sap2000py
+repo_url: https://github.com/GLY2024/Sap2000py
+repo_name: GLY2024/Sap2000py
 
 theme:
   name: material

@@ -2,7 +2,7 @@
 
 `client.model` groups the everyday API into managers. This guide walks through a
 full build → analyze → extract cycle. A complete runnable script is in
-[`examples/portal_frame.py`](https://github.com/ganansuan647/Sap2000py/blob/main/examples/portal_frame.py).
+[`examples/portal_frame.py`](https://github.com/GLY2024/Sap2000py/blob/main/examples/portal_frame.py).
 
 ## Materials
 
