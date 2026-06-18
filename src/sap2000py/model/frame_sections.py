@@ -3,13 +3,44 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import ClassVar
 
-from ..handles import FrameSectionHandle, MaterialHandle, as_name
+from ..handles import Handle
 from ._base import Manager
+from .materials import MaterialHandle
+
+
+@dataclass(frozen=True)
+class FrameSectionHandle(Handle):
+    """A live frame section property reference."""
+
+    _manager_path: ClassVar[str] = "m.frame_sections"
+
+    def modifiers(self, values: Sequence[float]) -> FrameSectionHandle:
+        """Set the 8 section property modifiers and return ``self``."""
+        if len(values) != 8:
+            raise ValueError(f"modifiers must have 8 elements, got {len(values)}.")
+        owner = self._require_owner()
+        owner._g.call(
+            owner._raw.PropFrame.SetModifiers,
+            self.name,
+            list(values),
+            api_name="PropFrame.SetModifiers",
+        )
+        return self
+
+    def delete(self) -> None:
+        """Delete this frame section property."""
+        owner = self._require_owner()
+        owner._g.call(owner._raw.PropFrame.Delete, self.name, api_name="PropFrame.Delete")
 
 
 class FrameSections(Manager):
     """Define and query frame section properties. Wraps ``cPropFrame``."""
+
+    _handle_cls = FrameSectionHandle
+    _kind = "frame section"
 
     def _handle(self, name: str) -> FrameSectionHandle:
         return FrameSectionHandle(name, _owner=self)
@@ -31,7 +62,7 @@ class FrameSections(Manager):
         self._g.call(
             self._raw.PropFrame.SetRectangle,
             name,
-            as_name(material),
+            self._model.materials.ref(material).name,
             float(depth),
             float(width),
             -1,
@@ -53,7 +84,7 @@ class FrameSections(Manager):
         self._g.call(
             self._raw.PropFrame.SetCircle,
             name,
-            as_name(material),
+            self._model.materials.ref(material).name,
             float(diameter),
             -1,
             notes,
@@ -87,7 +118,7 @@ class FrameSections(Manager):
         self._g.call(
             self._raw.PropFrame.SetGeneral,
             name,
-            as_name(material),
+            self._model.materials.ref(material).name,
             float(depth),
             float(width),
             float(area),
@@ -108,21 +139,6 @@ class FrameSections(Manager):
             api_name="PropFrame.SetGeneral",
         )
         return self._handle(name)
-
-    def set_modifiers(self, section: FrameSectionHandle | str, modifiers: Sequence[float]) -> None:
-        """Set the 8 section property modifiers.
-
-        Order: ``[area, as2, as3, torsion, i22, i33, mass, weight]``. Wraps
-        ``PropFrame.SetModifiers``.
-        """
-        if len(modifiers) != 8:
-            raise ValueError(f"modifiers must have 8 elements, got {len(modifiers)}.")
-        self._g.call(
-            self._raw.PropFrame.SetModifiers,
-            as_name(section),
-            list(modifiers),
-            api_name="PropFrame.SetModifiers",
-        )
 
     def names(self) -> list[str]:
         """All frame section names. Wraps ``PropFrame.GetNameList``."""

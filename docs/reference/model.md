@@ -108,6 +108,11 @@ into sub-managers, each documented below.
       show_root_heading: true
       heading_level: 3
 
+::: sap2000py.model.results.ResultBatch
+    options:
+      show_root_heading: true
+      heading_level: 3
+
 ::: sap2000py.model.results.ResultTable
     options:
       show_root_heading: true

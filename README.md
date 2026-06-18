@@ -29,23 +29,30 @@ foundation.
 ## Design at a glance
 
 ```python
-from sap2000py import SapClient, Units, DOF
+from sap2000py import DOF, SapClient, Units
 
-with SapClient.launch(visible=False) as client:
+with SapClient.launch(version="25", visible=False, units=Units.KN_M_C) as client:
     m = client.model
     m.files.new_blank(units=Units.KN_M_C)
 
     c40 = m.materials.add_concrete("C40", code="JTG")
     sec = m.frame_sections.add_rectangle("Pier", material=c40, depth=2.0, width=1.0)
 
-    p1 = m.points.add(0, 0, 0)
+    p1 = m.points.add(0, 0, 0).restrain(DOF.fixed())
     p2 = m.points.add(0, 0, 10)
-    m.frames.add_by_points(p1, p2, section=sec)
-    m.points.set_restraints(p1, dof=DOF.fixed())
+    col = m.frames.add_by_points(p1, p2, section=sec)
 
-    m.analysis.run(cases=["MODAL"])
-    print(m.results.modal_periods().to_pandas())
+    m.analysis.run(cases=["DEAD"])
+    m.results.select_output(cases=["DEAD"])
+    print(col.forces().to_pandas())
 ```
+
+A live handle is a reference to an object in SAP2000 by name. It stores no model
+state; methods such as `p1.restrain(...)`, `p1.coordinates()`, and
+`col.forces()` make an OAPI call each time, so GUI edits or other scripts never
+leave cached Python data behind. For large result reads, use
+`m.results.batch(...).collect()` to select output once and read groups or the
+current SAP2000 selection in bulk.
 
 Anything not yet wrapped by the typed `model` facade is always reachable
 through the full dynamic proxy, with the same error handling:

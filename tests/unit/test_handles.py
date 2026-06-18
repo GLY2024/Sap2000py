@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from sap2000py.handles import FrameHandle, PointHandle, as_name
+from sap2000py import FrameHandle, PointHandle
+from sap2000py.handles import as_name
 
 
 def test_handle_stringifies_to_name() -> None:

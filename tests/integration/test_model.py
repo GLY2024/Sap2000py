@@ -14,15 +14,6 @@ from sap2000py import DOF, SapClient, Units
 pytestmark = pytest.mark.sap
 
 
-@pytest.fixture(scope="module")
-def client():
-    c = SapClient.launch(visible=False, units=Units.KN_M_C)
-    try:
-        yield c
-    finally:
-        c.close()
-
-
 def _build_portal(m) -> None:
     """A 4 m x 3 m steel portal frame, columns fixed at the base."""
     m.files.new_blank(units=Units.KN_M_C)
@@ -34,8 +25,8 @@ def _build_portal(m) -> None:
     b2 = m.points.add(4, 0, 0)
     t1 = m.points.add(0, 0, 3)
     t2 = m.points.add(4, 0, 3)
-    m.points.set_restraints(b1, DOF.fixed())
-    m.points.set_restraints(b2, DOF.fixed())
+    b1.restrain(DOF.fixed())
+    b2.restrain(DOF.fixed())
 
     m.frames.add_by_points(b1, t1, section="COL")
     m.frames.add_by_points(b2, t2, section="COL")
@@ -84,7 +75,7 @@ def test_frame_forces_extractable(client: SapClient, tmp_path) -> None:
     _build_portal(m)
     m.loads.patterns.set_self_weight("DEAD", 1.0)
     beam = m.frames.names()[-1]
-    m.frames.set_output_stations(beam, min_stations=5)
+    m.frames.ref(beam).stations(min_stations=5)
     m.files.save(tmp_path / "forces.sdb")
 
     client.model.analysis.run(cases=["DEAD"])

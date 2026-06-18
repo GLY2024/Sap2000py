@@ -13,6 +13,7 @@ SAP2000. Create a connection explicitly::
 from __future__ import annotations
 
 from .client import SapClient
+from .discovery import Installation, installations
 from .enums import (
     DOF,
     DOF_NAMES,
@@ -22,33 +23,37 @@ from .enums import (
     MatType,
     Units,
     dof_mask,
+    to_dof_mask,
 )
 from .errors import (
     MissingDependencyError,
     SapAnalysisError,
     SapApiError,
     SapComError,
+    SapCompatibilityError,
     SapConnectionError,
     SapError,
     SapModelLockedError,
     SapNameNotFoundError,
+    SapVersionMismatchError,
+    SapVersionNotFoundError,
 )
 from .gateway import ErrorPolicy
 from .handles import (
     AreaHandle,
     CableHandle,
-    FrameHandle,
-    FrameSectionHandle,
-    GroupHandle,
     Handle,
-    LinkHandle,
-    LinkPropHandle,
-    MaterialHandle,
-    PointHandle,
     SolidHandle,
     TendonHandle,
 )
 from .model.analysis import AnalysisReport
+from .model.frame_sections import FrameSectionHandle
+from .model.frames import FrameHandle
+from .model.groups import GroupHandle
+from .model.link_props import LinkPropHandle
+from .model.links import LinkHandle
+from .model.materials import MaterialHandle
+from .model.points import PointHandle
 from .model.results import ResultTable
 
 __version__ = "1.0.0a1"
@@ -57,6 +62,8 @@ __all__ = [  # noqa: RUF022 - grouped by category for readability, not sorted
     "__version__",
     # connection
     "SapClient",
+    "Installation",
+    "installations",
     "ErrorPolicy",
     # enums / values
     "Units",
@@ -67,6 +74,7 @@ __all__ = [  # noqa: RUF022 - grouped by category for readability, not sorted
     "DOF",
     "DOF_NAMES",
     "dof_mask",
+    "to_dof_mask",
     # results
     "ResultTable",
     "AnalysisReport",
@@ -78,6 +86,9 @@ __all__ = [  # noqa: RUF022 - grouped by category for readability, not sorted
     "SapModelLockedError",
     "SapNameNotFoundError",
     "SapAnalysisError",
+    "SapVersionNotFoundError",
+    "SapVersionMismatchError",
+    "SapCompatibilityError",
     "MissingDependencyError",
     # handles
     "Handle",

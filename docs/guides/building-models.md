@@ -35,13 +35,13 @@ from sap2000py import DOF
 
 base = m.points.add(0, 0, 0)
 top = m.points.add(0, 0, 3)
-m.points.set_restraints(base, DOF.fixed())      # or DOF.pinned(), DOF.of("U1", "U3")
-col = m.frames.add_by_points(base, top, section="COL")
-m.frames.set_releases(col, i_end=DOF.free(), j_end=DOF.of("R2", "R3"))
+base.restrain(DOF.fixed())                      # or DOF.pinned(), DOF.of("U1", "U3")
+col = m.frames.add_by_points(base, top, section="COL").release(j_end=DOF.of("R2", "R3"))
 ```
 
-Creators return typed handles that stringify to their name, so handles and raw
-names are interchangeable.
+Creators return live handles that stringify to their name. They store only the
+object name and owner model; methods such as `base.restrain(...)`,
+`top.coordinates()`, and `col.forces()` round-trip to SAP2000 each time.
 
 ## Loads
 
@@ -74,10 +74,30 @@ assert report.all_finished
 m.results.select_output(cases=["SLS"])
 
 periods = m.results.modal_periods()
-reactions = m.results.joint_reactions(base)
-forces = m.results.frame_forces(col)
+reactions = base.reactions()
+forces = col.forces()
 
 print(periods.to_pandas())          # needs the `tables` extra
 for row in reactions.rows():        # always available
     print(row["F3"])
 ```
+
+For many objects, use the delayed batch API. It changes the SAP2000 output
+selection only when `cases=` or `combos=` is provided, and it does so once at
+`collect()` time:
+
+```python
+tables = (
+    m.results.batch(cases=["SLS"])
+    .frame_forces(group="PierFrames", key="pier_forces")
+    .joint_reactions(group="Supports", key="support_reactions")
+    .collect()
+)
+
+selected = m.results.batch().frame_forces(selection=True, key="selected").collect()
+```
+
+`selection=True` means the current SAP2000 object selection; it does not select
+or deselect objects for you. For arbitrary lists, `frames=[...]` and
+`points=[...]` default to object-by-object reads. `strategy="temporary_group"` is
+an explicit opt-in when you want SAP2000's group result path for one batch.

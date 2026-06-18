@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sap2000py.enums import DOF, ItemType, Units, dof_mask
+from sap2000py.enums import DOF, ItemType, Units, dof_mask, to_dof_mask
 
 
 def test_units_values_match_oapi_ids() -> None:
@@ -24,6 +24,26 @@ def test_dof_mask_is_case_insensitive() -> None:
 def test_dof_mask_rejects_unknown() -> None:
     with pytest.raises(ValueError, match="not a valid DOF"):
         dof_mask(["U7"])
+
+
+def test_to_dof_mask_accepts_name_sequence_bool_mask_and_none() -> None:
+    assert to_dof_mask("R2") == [False, False, False, False, True, False]
+    assert to_dof_mask(["U1", "R3"]) == [True, False, False, False, False, True]
+    assert to_dof_mask([True, False, False, False, False, True]) == [
+        True,
+        False,
+        False,
+        False,
+        False,
+        True,
+    ]
+    assert to_dof_mask(None, default=True) == [True] * 6
+    assert to_dof_mask(None, default=False) == [False] * 6
+
+
+def test_to_dof_mask_rejects_short_bool_mask() -> None:
+    with pytest.raises(ValueError, match="6 elements"):
+        to_dof_mask([True])
 
 
 def test_dof_constructors() -> None:

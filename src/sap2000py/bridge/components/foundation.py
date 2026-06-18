@@ -48,8 +48,8 @@ class Foundation(BridgeComponent):
     def _build(self, model: Model) -> None:
         base = model.points.add(self.x, self.y, self.z, name=f"{self.name}_base", merge=False)
         if self.kind == "fixed":
-            model.points.set_restraints(base, self.fix_dof or DOF.fixed())
+            base.restrain(self.fix_dof or DOF.fixed())
         else:
             assert self.stiffness is not None  # guarded in __init__
-            model.points.set_spring(base, self.stiffness)
+            base.spring(self.stiffness)
         self._set_anchor("top", base)

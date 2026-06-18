@@ -36,9 +36,11 @@ m.frames.add_by_points(p1, p2, section=42)    # type error: int is not a section
 ```
 
 Object references are typed [handles](../reference/handles.md)
-(`PointHandle`, `FrameHandle`, …). Any API that takes an object accepts
-`Handle | str`, so both the handle returned by a builder and a raw name
-type-check.
+(`PointHandle`, `FrameHandle`, …). Public APIs accept the right handle type or a
+raw name string. A handle from the same model is used as-is; a raw string is
+bound through that manager with `ref()`. Passing the wrong handle noun or a
+handle owned by another model raises immediately instead of silently routing a
+call to the wrong SAP2000 instance.
 
 ## The native escape hatch
 

@@ -11,12 +11,13 @@ Integration tests are marked ``@pytest.mark.sap`` and are skipped unless
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
 
+from sap2000py import SapClient, Units, installations
 from sap2000py.gateway import ComGateway
 from sap2000py.model import Model
 
@@ -37,6 +38,22 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     for item in items:
         if "sap" in item.keywords:
             item.add_marker(skip_sap)
+
+
+@pytest.fixture(scope="session")
+def client(request: pytest.FixtureRequest) -> Iterator[SapClient]:
+    """One owned SAP2000 process shared by all ``--sap`` integration tests."""
+    if not request.config.getoption("--sap"):
+        pytest.skip("needs a real SAP2000 install; run with --sap")
+    available = [item for item in installations() if item.major is not None]
+    if not available:
+        pytest.skip("no discoverable SAP2000 installation")
+
+    c = SapClient.launch(version=str(available[0].major), visible=False, units=Units.KN_M_C)
+    try:
+        yield c
+    finally:
+        c.close()
 
 
 class FakeCom:

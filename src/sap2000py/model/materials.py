@@ -8,8 +8,11 @@ with the exact SAP2000 grade string.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import ClassVar
+
 from ..enums import MatType
-from ..handles import MaterialHandle, as_name
+from ..handles import Handle
 from ._base import Manager
 
 # SAP2000 grade-string conventions, ported from the legacy China material set.
@@ -24,8 +27,35 @@ _STEEL_GRADE = {
 }
 
 
+@dataclass(frozen=True)
+class MaterialHandle(Handle):
+    """A live material property reference."""
+
+    _manager_path: ClassVar[str] = "m.materials"
+
+    def weight_per_volume(self, value: float) -> MaterialHandle:
+        """Set weight per unit volume and return ``self`` for chaining."""
+        owner = self._require_owner()
+        owner._g.call(
+            owner._raw.PropMaterial.SetWeightAndMass,
+            self.name,
+            1,
+            float(value),
+            api_name="PropMaterial.SetWeightAndMass",
+        )
+        return self
+
+    def delete(self) -> None:
+        """Delete this material property."""
+        owner = self._require_owner()
+        owner._g.call(owner._raw.PropMaterial.Delete, self.name, api_name="PropMaterial.Delete")
+
+
 class Materials(Manager):
     """Define and query material properties. Wraps ``cPropMaterial``."""
+
+    _handle_cls = MaterialHandle
+    _kind = "material"
 
     def _handle(self, name: str) -> MaterialHandle:
         return MaterialHandle(name, _owner=self)
@@ -125,16 +155,6 @@ class Materials(Manager):
                 api_name="PropMaterial.SetWeightAndMass",
             )
         return self._handle(name)
-
-    def set_weight_per_volume(self, material: MaterialHandle | str, weight: float) -> None:
-        """Set a material's weight per unit volume. Wraps ``SetWeightAndMass``."""
-        self._g.call(
-            self._raw.PropMaterial.SetWeightAndMass,
-            as_name(material),
-            1,
-            float(weight),
-            api_name="PropMaterial.SetWeightAndMass",
-        )
 
     def names(self) -> list[str]:
         """All material names. Wraps ``PropMaterial.GetNameList``."""

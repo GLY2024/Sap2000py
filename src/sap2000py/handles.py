@@ -1,20 +1,18 @@
-"""Lightweight, immutable references to model objects.
+"""Lightweight name handles.
 
-A handle is a typed wrapper around an object's *name*. It deliberately caches
-no model state, so editing the model in the SAP2000 GUI never makes a handle go
-stale. Every API that accepts an object accepts ``Handle | str`` and normalizes
-internally with :func:`as_name`.
+The concrete live handles for wrapped model nouns live next to their managers
+in ``sap2000py.model``. They are live references to SAP2000 objects: a handle
+only stores the object's name and never caches model state, while methods on an
+owned handle round-trip to SAP2000 each time.
 
-Convenience accessors (e.g. ``point.coordinates``) are attached by the typed
-``model`` layer, which sets ``_owner`` to the managing collection when it mints
-a handle. ``_owner`` is excluded from equality and repr, so two handles compare
-equal iff they have the same type and name.
+This module stays pure: the base :class:`Handle`, :func:`as_name`, and the
+unwrapped name handles for nouns that do not yet have managers.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 
 @dataclass(frozen=True)
@@ -23,19 +21,20 @@ class Handle:
 
     name: str
     _owner: Any = field(default=None, compare=False, repr=False, kw_only=True)
+    _manager_path: ClassVar[str] = "manager"
 
     def __str__(self) -> str:
         return self.name
 
-
-@dataclass(frozen=True)
-class PointHandle(Handle):
-    """A point (joint) object."""
-
-
-@dataclass(frozen=True)
-class FrameHandle(Handle):
-    """A frame (line) object."""
+    def _require_owner(self) -> Any:
+        """Return the manager this handle is bound to, or raise a clear error."""
+        if self._owner is None:
+            hint = f"{self._manager_path}.ref({self.name!r})"
+            raise ValueError(
+                f"{type(self).__name__}({self.name!r}) is not bound to a model; "
+                f"use {hint} or {self._manager_path}[{self.name!r}] before calling live methods."
+            )
+        return self._owner
 
 
 @dataclass(frozen=True)
@@ -56,31 +55,6 @@ class AreaHandle(Handle):
 @dataclass(frozen=True)
 class SolidHandle(Handle):
     """A solid object."""
-
-
-@dataclass(frozen=True)
-class LinkHandle(Handle):
-    """A link (two-joint or one-joint) object."""
-
-
-@dataclass(frozen=True)
-class MaterialHandle(Handle):
-    """A material property."""
-
-
-@dataclass(frozen=True)
-class FrameSectionHandle(Handle):
-    """A frame section property."""
-
-
-@dataclass(frozen=True)
-class LinkPropHandle(Handle):
-    """A link property (linear or nonlinear)."""
-
-
-@dataclass(frozen=True)
-class GroupHandle(Handle):
-    """A named group of objects."""
 
 
 def as_name(obj: Handle | str) -> str:

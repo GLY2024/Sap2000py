@@ -10,6 +10,8 @@ load patterns, a modal case, running the analysis, and pulling results.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sap2000py import DOF, SapClient, Units
 
 
@@ -24,14 +26,12 @@ def main() -> None:
         m.frame_sections.add_rectangle("BEAM", material="STEEL", depth=0.5, width=0.3)
 
         # Geometry: a 4 m x 3 m portal, fixed at the bases.
-        b1 = m.points.add(0, 0, 0)
-        b2 = m.points.add(4, 0, 0)
+        b1 = m.points.add(0, 0, 0).restrain(DOF.fixed())
+        b2 = m.points.add(4, 0, 0).restrain(DOF.fixed())
         t1 = m.points.add(0, 0, 3)
         t2 = m.points.add(4, 0, 3)
-        m.points.set_restraints(b1, DOF.fixed())
-        m.points.set_restraints(b2, DOF.fixed())
 
-        m.frames.add_by_points(b1, t1, section="COL")
+        left_col = m.frames.add_by_points(b1, t1, section="COL")
         m.frames.add_by_points(b2, t2, section="COL")
         m.frames.add_by_points(t1, t2, section="BEAM")
 
@@ -40,7 +40,15 @@ def main() -> None:
         m.loads.cases.add_modal_eigen("MODAL", num_modes=6)
 
         # Analyze and report.
-        m.analysis.run(cases=["MODAL"])
+        m.files.save(Path(__file__).with_name("portal_frame.sdb"))
+        m.analysis.run(cases=["DEAD", "MODAL"])
+        m.results.select_output(cases=["DEAD"])
+        reactions = b1.reactions()
+        forces = left_col.forces()
+        print("Base F3:", reactions["F3"][0])
+        print("Left column P:", forces["P"][0])
+
+        m.results.select_output(cases=["MODAL"])
         periods = m.results.modal_periods()
         print("Mode  Period (s)  Frequency (Hz)")
         for row in periods.rows():

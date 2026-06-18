@@ -3,14 +3,109 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any, ClassVar
 
-from ..enums import ItemType
-from ..handles import PointHandle, as_name
+from ..enums import ItemType, to_dof_mask
+from ..handles import Handle
 from ._base import Manager
+
+DofSpec = str | Sequence[str] | Sequence[bool] | None
+
+
+@dataclass(frozen=True)
+class PointHandle(Handle):
+    """A live point (joint) object reference."""
+
+    _manager_path: ClassVar[str] = "m.points"
+
+    def restrain(self, dof: DofSpec) -> PointHandle:
+        """Set point restraints and return ``self`` for chaining."""
+        owner = self._require_owner()
+        owner._g.call(
+            owner._raw.PointObj.SetRestraint,
+            self.name,
+            to_dof_mask(dof),
+            int(ItemType.OBJECT),
+            api_name="PointObj.SetRestraint",
+        )
+        return self
+
+    def spring(
+        self,
+        stiffness: Sequence[float],
+        *,
+        local_csys: bool = False,
+        replace: bool = True,
+    ) -> PointHandle:
+        """Assign six uncoupled spring stiffnesses and return ``self``."""
+        if len(stiffness) != 6:
+            raise ValueError(f"stiffness must have 6 elements [U1..R3], got {len(stiffness)}.")
+        owner = self._require_owner()
+        owner._g.call(
+            owner._raw.PointObj.SetSpring,
+            self.name,
+            [float(k) for k in stiffness],
+            int(ItemType.OBJECT),
+            local_csys,
+            replace,
+            api_name="PointObj.SetSpring",
+        )
+        return self
+
+    def constrain(self, name: str, *, replace: bool = False) -> PointHandle:
+        """Assign this point to a named joint constraint and return ``self``."""
+        owner = self._require_owner()
+        owner._g.call(
+            owner._raw.PointObj.SetConstraint,
+            self.name,
+            name,
+            int(ItemType.OBJECT),
+            replace,
+            api_name="PointObj.SetConstraint",
+        )
+        return self
+
+    def coordinates(self, *, csys: str = "Global") -> tuple[float, float, float]:
+        """Return ``(x, y, z)`` in ``csys``."""
+        owner = self._require_owner()
+        x, y, z = owner._g.call(
+            owner._raw.PointObj.GetCoordCartesian,
+            self.name,
+            0.0,
+            0.0,
+            0.0,
+            csys,
+            api_name="PointObj.GetCoordCartesian",
+        )
+        return float(x), float(y), float(z)
+
+    def reactions(self) -> Any:
+        """Joint reactions for the currently selected output cases/combos."""
+        owner = self._require_owner()
+        return owner._model.results.joint_reactions(self)
+
+    def displacements(self) -> Any:
+        """Joint displacements for the currently selected output cases/combos."""
+        owner = self._require_owner()
+        return owner._model.results.joint_displacements(self)
+
+    def delete(self) -> None:
+        """Delete this point object."""
+        owner = self._require_owner()
+        owner._g.call(
+            owner._raw.PointObj.Delete,
+            self.name,
+            int(ItemType.OBJECT),
+            api_name="PointObj.Delete",
+        )
 
 
 class Points(Manager):
     """Create and manipulate point objects. Wraps ``cPointObj``."""
+
+    _handle_cls = PointHandle
+    _kind = "point"
 
     def _handle(self, name: str) -> PointHandle:
         return PointHandle(name, _owner=self)
@@ -67,101 +162,3 @@ class Points(Manager):
         result = self._g.call(self._raw.PointObj.GetNameList, api_name="PointObj.GetNameList")
         _count, names = result
         return list(names) if names else []
-
-    def coordinates(
-        self, point: PointHandle | str, *, csys: str = "Global"
-    ) -> tuple[float, float, float]:
-        """Return ``(x, y, z)`` of a point. Wraps ``PointObj.GetCoordCartesian``."""
-        # GetCoordCartesian(Name, X[in,out], Y, Z, CSys) -> (X, Y, Z)
-        x, y, z = self._g.call(
-            self._raw.PointObj.GetCoordCartesian,
-            as_name(point),
-            0.0,
-            0.0,
-            0.0,
-            csys,
-            api_name="PointObj.GetCoordCartesian",
-        )
-        return float(x), float(y), float(z)
-
-    def set_restraints(
-        self,
-        point: PointHandle | str,
-        dof: Sequence[bool],
-        *,
-        item_type: ItemType = ItemType.OBJECT,
-    ) -> None:
-        """Set the six restraint DOF ``[U1, U2, U3, R1, R2, R3]``.
-
-        Build the mask with :class:`~sap2000py.enums.DOF`, e.g.
-        ``set_restraints(p, DOF.fixed())``. Wraps ``PointObj.SetRestraint``.
-        """
-        if len(dof) != 6:
-            raise ValueError(f"dof must have 6 elements [U1..R3], got {len(dof)}.")
-        self._g.call(
-            self._raw.PointObj.SetRestraint,
-            as_name(point),
-            list(dof),
-            int(item_type),
-            api_name="PointObj.SetRestraint",
-        )
-
-    def set_spring(
-        self,
-        point: PointHandle | str,
-        stiffness: Sequence[float],
-        *,
-        local_csys: bool = False,
-        replace: bool = True,
-        item_type: ItemType = ItemType.OBJECT,
-    ) -> None:
-        """Assign six uncoupled spring stiffnesses ``[U1, U2, U3, R1, R2, R3]``.
-
-        Wraps ``PointObj.SetSpring``. Use this for an elastic foundation: a
-        diagonal 6-DOF support whose stiffnesses are in the current force/length
-        units.
-        """
-        if len(stiffness) != 6:
-            raise ValueError(f"stiffness must have 6 elements [U1..R3], got {len(stiffness)}.")
-        # SetSpring(Name, Value[6], ItemType, IsLocalCSys, Replace)
-        self._g.call(
-            self._raw.PointObj.SetSpring,
-            as_name(point),
-            [float(k) for k in stiffness],
-            int(item_type),
-            local_csys,
-            replace,
-            api_name="PointObj.SetSpring",
-        )
-
-    def set_constraint(
-        self,
-        point: PointHandle | str,
-        constraint: str,
-        *,
-        replace: bool = False,
-        item_type: ItemType = ItemType.OBJECT,
-    ) -> None:
-        """Assign ``point`` to a named joint constraint. Wraps ``PointObj.SetConstraint``.
-
-        Define the constraint first with :class:`~sap2000py.model.constraints.Constraints`
-        (``model.constraints.add_body(...)`` / ``add_equal(...)``).
-        """
-        # SetConstraint(Name, ConstraintName, ItemType, Replace)
-        self._g.call(
-            self._raw.PointObj.SetConstraint,
-            as_name(point),
-            constraint,
-            int(item_type),
-            replace,
-            api_name="PointObj.SetConstraint",
-        )
-
-    def delete(self, point: PointHandle | str, *, item_type: ItemType = ItemType.OBJECT) -> None:
-        """Delete a point object. Wraps ``PointObj.Delete``."""
-        self._g.call(
-            self._raw.PointObj.Delete,
-            as_name(point),
-            int(item_type),
-            api_name="PointObj.Delete",
-        )

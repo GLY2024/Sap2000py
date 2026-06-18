@@ -18,6 +18,23 @@ class SapConnectionError(SapError):
     """Raised when launching or attaching to a SAP2000 instance fails."""
 
 
+class SapVersionNotFoundError(SapConnectionError):
+    """Raised when a requested SAP2000 major version cannot be found."""
+
+
+class SapVersionMismatchError(SapConnectionError):
+    """Raised when the connected SAP2000 process is not the requested version."""
+
+    def __init__(self, requested: int, actual: int | None) -> None:
+        self.requested = requested
+        self.actual = actual
+        super().__init__(f"Requested SAP2000 major version {requested}, got {actual}.")
+
+
+class SapCompatibilityError(SapError):
+    """Raised when a connected SAP2000 version has no compatibility entry."""
+
+
 class MissingDependencyError(SapError):
     """Raised when an optional feature is used without its extra installed.
 
@@ -76,8 +93,19 @@ class SapModelLockedError(SapApiError):
     """Raised when an operation is rejected because the model is locked."""
 
 
-class SapNameNotFoundError(SapApiError):
-    """Raised when an object name referenced by an operation does not exist."""
+class SapNameNotFoundError(SapError):
+    """Raised when a client-side name validation cannot find an object."""
+
+    def __init__(
+        self, name: str, *, kind: str = "object", available: list[str] | None = None
+    ) -> None:
+        self.name = name
+        self.kind = kind
+        self.available = available
+        message = f"No {kind} named {name!r}."
+        if available is not None:
+            message = f"{message} Available names: {available!r}."
+        super().__init__(message)
 
 
 class SapAnalysisError(SapError):

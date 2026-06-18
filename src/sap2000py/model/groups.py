@@ -2,16 +2,37 @@
 
 from __future__ import annotations
 
-from ..handles import GroupHandle, as_name
+from dataclasses import dataclass
+from typing import ClassVar
+
+from ..handles import Handle
 from ._base import Manager
+
+
+@dataclass(frozen=True)
+class GroupHandle(Handle):
+    """A live group definition reference."""
+
+    _manager_path: ClassVar[str] = "m.groups"
+
+    def delete(self) -> None:
+        """Delete this group definition."""
+        owner = self._require_owner()
+        owner._g.call(owner._raw.GroupDef.Delete, self.name, api_name="GroupDef.Delete")
 
 
 class Groups(Manager):
     """Define and query groups. Wraps ``cGroup``.
 
-    Assigning objects to a group is done from the object managers, e.g.
-    ``model.frames.add_to_group(frame, group)``.
+    Assigning objects to a group is done from live handles, e.g.
+    ``model.frames.ref(frame).group(group)``.
     """
+
+    _handle_cls = GroupHandle
+    _kind = "group"
+
+    def _handle(self, name: str) -> GroupHandle:
+        return GroupHandle(name, _owner=self)
 
     def add(self, name: str) -> GroupHandle:
         """Create (or redefine) a group. Wraps ``GroupDef.SetGroup``."""
@@ -24,7 +45,3 @@ class Groups(Manager):
             self._raw.GroupDef.GetNameList, api_name="GroupDef.GetNameList"
         )
         return list(names) if names else []
-
-    def delete(self, group: GroupHandle | str) -> None:
-        """Delete a group (objects are not deleted). Wraps ``GroupDef.Delete``."""
-        self._g.call(self._raw.GroupDef.Delete, as_name(group), api_name="GroupDef.Delete")

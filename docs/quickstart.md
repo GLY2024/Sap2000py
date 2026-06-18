@@ -31,26 +31,30 @@ with SapClient.launch(visible=False) as client:
     m.files.new_blank(units=Units.KN_M_C)
 
     # A column from the ground up.
-    base = m.points.add(0, 0, 0)
+    base = m.points.add(0, 0, 0).restrain(DOF.fixed())
     top = m.points.add(0, 0, 10)
-    m.points.set_restraints(base, DOF.fixed())
 
     print("points:", m.points.count())
-    print("top z:", m.points.coordinates(top)[2])
+    print("top z:", top.coordinates()[2])
 
     m.files.save(r"C:\tmp\column.sdb")
 ```
 
-## Handles or names
+## Live handles
 
-Object creators return a typed handle that stringifies to its name. Anywhere an
-object is expected, a handle or a raw name string both work:
+Object creators return a live handle: a typed reference to an object in SAP2000
+by name. It stores no model state, and each method round-trips to SAP2000:
 
 ```python
 p = m.points.add(1, 2, 3)     # PointHandle("P1")
-m.points.set_restraints(p, DOF.pinned())
-m.points.set_restraints("P1", DOF.pinned())   # equivalent
+p.restrain(DOF.pinned())
+m.points.ref("P1").restrain(DOF.pinned())     # bind a raw name to this model
 ```
+
+For result extraction, single-object handle methods are immediate and read the
+current output selection. Use `m.results.batch(...).collect()` when you want to
+select cases once and read many objects, groups, or the current SAP2000
+selection.
 
 ## Reach the rest of the OAPI
 

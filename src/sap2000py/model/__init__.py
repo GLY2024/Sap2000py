@@ -11,22 +11,32 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
+from ..discovery import _major
 from ..enums import Units
 from ..gateway import ComGateway
 from .analysis import Analysis
 from .constraints import Constraints
 from .files import Files
-from .frame_sections import FrameSections
-from .frames import Frames
-from .groups import Groups
-from .link_props import LinkProps
-from .links import Links
+from .frame_sections import FrameSectionHandle, FrameSections
+from .frames import FrameHandle, Frames
+from .groups import GroupHandle, Groups
+from .link_props import LinkPropHandle, LinkProps
+from .links import LinkHandle, Links
 from .loads import Loads
-from .materials import Materials
-from .points import Points
+from .materials import MaterialHandle, Materials
+from .points import PointHandle, Points
 from .results import Results
 
-__all__ = ["Model"]
+__all__ = [
+    "FrameHandle",
+    "FrameSectionHandle",
+    "GroupHandle",
+    "LinkHandle",
+    "LinkPropHandle",
+    "MaterialHandle",
+    "Model",
+    "PointHandle",
+]
 
 
 class Model:
@@ -40,6 +50,7 @@ class Model:
 
     def __init__(self, gateway: ComGateway) -> None:
         self._g = gateway
+        self._sap_version: str | None = None
         self.files = Files(self)
         self.points = Points(self)
         self.materials = Materials(self)
@@ -62,6 +73,19 @@ class Model:
     def raw(self) -> Any:
         """The raw comtypes ``cSapModel`` — escape hatch for unwrapped APIs."""
         return self._g.model
+
+    @property
+    def sap_version(self) -> str:
+        """SAP2000 program version string, cached per model connection."""
+        if self._sap_version is None:
+            version, _number = self._g.call(self.raw.GetVersion, "", 0.0, api_name="GetVersion")
+            self._sap_version = str(version)
+        return self._sap_version
+
+    @property
+    def sap_version_major(self) -> int:
+        """SAP2000 major version parsed from :attr:`sap_version`."""
+        return _major(self.sap_version)
 
     # -- units --------------------------------------------------------------
 
