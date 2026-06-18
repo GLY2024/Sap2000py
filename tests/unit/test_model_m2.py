@@ -61,10 +61,10 @@ def test_add_rectangle_rejects_foreign_material_handle(make_model) -> None:
     assert h1.called("PropFrame.SetRectangle") == []
 
 
-def test_frame_section_handle_modifiers_validates_length(make_model) -> None:
+def test_frame_section_handle_set_modifiers_validates_length(make_model) -> None:
     h = make_model({"PropFrame.SetModifiers": 0})
     with pytest.raises(ValueError, match="8 elements"):
-        h.model.frame_sections.ref("R").modifiers([1.0, 1.0])
+        h.model.frame_sections.ref("R").set_modifiers([1.0, 1.0])
 
 
 # -- frames -----------------------------------------------------------------
@@ -106,14 +106,14 @@ def test_frame_handle_release_validates_lengths(make_model) -> None:
 def test_output_stations_requires_exactly_one(make_model) -> None:
     h = make_model({"GetVersion": ("25.0.0", 25.0, 0), "FrameObj.SetOutputStations": 0})
     with pytest.raises(ValueError, match="exactly one"):
-        h.model.frames.ref("F1").stations()
+        h.model.frames.ref("F1").set_output_stations()
     with pytest.raises(ValueError, match="exactly one"):
-        h.model.frames.ref("F1").stations(min_stations=3, max_segment_size=1.0)
+        h.model.frames.ref("F1").set_output_stations(min_stations=3, max_segment_size=1.0)
 
 
 def test_output_stations_min_count(make_model) -> None:
     h = make_model({"GetVersion": ("25.0.0", 25.0, 0), "FrameObj.SetOutputStations": 0})
-    h.model.frames.ref("F1").stations(min_stations=5)
+    h.model.frames.ref("F1").set_output_stations(min_stations=5)
     (args,) = h.called("FrameObj.SetOutputStations")
     # (name, myType=2, maxSeg=0.0, minSections=5, noOut, noOut, itemType)
     assert args == ("F1", 2, 0.0, 5, False, False, 0)
@@ -121,7 +121,7 @@ def test_output_stations_min_count(make_model) -> None:
 
 def test_output_stations_max_segment(make_model) -> None:
     h = make_model({"GetVersion": ("25.0.0", 25.0, 0), "FrameObj.SetOutputStations": 0})
-    h.model.frames.ref("F1").stations(max_segment_size=0.5)
+    h.model.frames.ref("F1").set_output_stations(max_segment_size=0.5)
     (args,) = h.called("FrameObj.SetOutputStations")
     assert args == ("F1", 1, 0.5, 2, False, False, 0)
 

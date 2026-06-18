@@ -6,11 +6,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from ..enums import ItemType, to_dof_mask
+from ..enums import DOF, ItemType, to_dof_mask
 from ..handles import Handle
 from ._base import Manager
-
-DofSpec = str | Sequence[str] | Sequence[bool] | None
 
 
 @dataclass(frozen=True)
@@ -19,19 +17,49 @@ class PointHandle(Handle):
 
     _manager_path: ClassVar[str] = "m.points"
 
-    def restrain(self, dof: DofSpec) -> PointHandle:
-        """Set point restraints and return ``self`` for chaining."""
+    def _set_restraint(self, mask: Sequence[bool]) -> PointHandle:
         owner = self._require_owner()
         owner._g.call(
             owner._raw.PointObj.SetRestraint,
             self.name,
-            to_dof_mask(dof),
+            list(mask),
             int(ItemType.OBJECT),
             api_name="PointObj.SetRestraint",
         )
         return self
 
-    def spring(
+    def restrain(self, *dof: str | Sequence[str] | Sequence[bool]) -> PointHandle:
+        """Set point restraints and return ``self`` for chaining.
+
+        Accepts DOF names as varargs (``restrain("U1", "R2")``), a single DOF
+        name, a name list, or a 6-bool mask such as ``DOF.fixed()``. Called with
+        no arguments it raises; use :meth:`free` to clear restraints, or
+        :meth:`fix` / :meth:`pin` for the common supports.
+        """
+        if not dof:
+            raise ValueError("restrain() needs at least one DOF; use free() to clear restraints.")
+        if len(dof) == 1:
+            spec: str | Sequence[str] | Sequence[bool] = dof[0]
+        else:
+            names = [d for d in dof if isinstance(d, str)]
+            if len(names) != len(dof):
+                raise ValueError("restrain() with multiple arguments expects DOF names.")
+            spec = names
+        return self._set_restraint(to_dof_mask(spec))
+
+    def fix(self) -> PointHandle:
+        """Fully restrain all six DOF (a fixed support). Returns ``self``."""
+        return self._set_restraint(DOF.fixed())
+
+    def pin(self) -> PointHandle:
+        """Restrain the three translations, free rotations (a pinned support). Returns ``self``."""
+        return self._set_restraint(DOF.pinned())
+
+    def free(self) -> PointHandle:
+        """Release all six DOF (a free joint). Returns ``self``."""
+        return self._set_restraint(DOF.free())
+
+    def set_spring(
         self,
         stiffness: Sequence[float],
         *,

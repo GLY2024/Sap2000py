@@ -24,18 +24,25 @@ SAP2000. When you `attach`, you don't — closing just drops the connection.
 ## Build a tiny model
 
 ```python
-from sap2000py import SapClient, Units, DOF
+from sap2000py import SapClient, Units
 
 with SapClient.launch(visible=False) as client:
     m = client.model
     m.files.new_blank(units=Units.KN_M_C)
 
     # A column from the ground up.
-    base = m.points.add(0, 0, 0).restrain(DOF.fixed())
+    mat = m.materials.add_concrete("C40", code="JTG")
+    sec = m.frame_sections.add_rectangle("COL", material=mat, depth=0.4, width=0.4)
+
+    base = m.points.add(0, 0, 0)
     top = m.points.add(0, 0, 10)
+    base.fix()
+    col = m.frames.add_by_points(base, top, section=sec)
 
     print("points:", m.points.count())
+    print("frames:", m.frames.count())
     print("top z:", top.coordinates()[2])
+    print("column length:", col.length)
 
     m.files.save(r"C:\tmp\column.sdb")
 ```
@@ -47,8 +54,9 @@ by name. It stores no model state, and each method round-trips to SAP2000:
 
 ```python
 p = m.points.add(1, 2, 3)     # PointHandle("P1")
-p.restrain(DOF.pinned())
-m.points.ref("P1").restrain(DOF.pinned())     # bind a raw name to this model
+p.pin()                       # fix() / pin() / free() for the common supports
+m.points.ref("P1").pin()      # bind a raw name to this model
+p.restrain("U1", "R3")        # or name exactly which DOF to restrain
 ```
 
 For result extraction, single-object handle methods are immediate and read the

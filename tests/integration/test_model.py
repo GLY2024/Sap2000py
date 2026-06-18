@@ -75,7 +75,7 @@ def test_frame_forces_extractable(client: SapClient, tmp_path) -> None:
     _build_portal(m)
     m.loads.patterns.set_self_weight("DEAD", 1.0)
     beam = m.frames.names()[-1]
-    m.frames.ref(beam).stations(min_stations=5)
+    m.frames.ref(beam).set_output_stations(min_stations=5)
     m.files.save(tmp_path / "forces.sdb")
 
     client.model.analysis.run(cases=["DEAD"])

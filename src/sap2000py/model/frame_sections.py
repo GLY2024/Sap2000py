@@ -17,7 +17,7 @@ class FrameSectionHandle(Handle):
 
     _manager_path: ClassVar[str] = "m.frame_sections"
 
-    def modifiers(self, values: Sequence[float]) -> FrameSectionHandle:
+    def set_modifiers(self, values: Sequence[float]) -> FrameSectionHandle:
         """Set the 8 section property modifiers and return ``self``."""
         if len(values) != 8:
             raise ValueError(f"modifiers must have 8 elements, got {len(values)}.")

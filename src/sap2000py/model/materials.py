@@ -33,7 +33,7 @@ class MaterialHandle(Handle):
 
     _manager_path: ClassVar[str] = "m.materials"
 
-    def weight_per_volume(self, value: float) -> MaterialHandle:
+    def set_weight_per_volume(self, value: float) -> MaterialHandle:
         """Set weight per unit volume and return ``self`` for chaining."""
         owner = self._require_owner()
         owner._g.call(

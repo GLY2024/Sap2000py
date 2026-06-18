@@ -28,6 +28,14 @@ m.frame_sections.add_general("BOX", material="STEEL", depth=2.0, width=5.0,
                              torsion=3.1, i22=2.3, i33=23.0)
 ```
 
+> **Creation methods follow one rule.** Each manager is a result noun; its
+> `add_*` methods are the creation variants — `add_<subtype>` when the product
+> differs (`add_concrete`, `add_rectangle`) and `add_by_<input>` when only the
+> inputs differ (`add_by_points`, `add_by_coord`). A bare `add` appears when a
+> noun has no variants (`points.add`, `groups.add`) or exposes a direct OAPI
+> creator (`materials.add`). Type `m.materials.add_` and let autocomplete list
+> every creator — the `add_` prefix is the discovery namespace.
+
 ## Geometry and restraints
 
 ```python
@@ -35,12 +43,13 @@ from sap2000py import DOF
 
 base = m.points.add(0, 0, 0)
 top = m.points.add(0, 0, 3)
-base.restrain(DOF.fixed())                      # or DOF.pinned(), DOF.of("U1", "U3")
+base.fix()                                      # fixed support; pin() / free() too
+# custom: base.restrain("U1", "U3") names exactly which DOF to restrain
 col = m.frames.add_by_points(base, top, section="COL").release(j_end=DOF.of("R2", "R3"))
 ```
 
 Creators return live handles that stringify to their name. They store only the
-object name and owner model; methods such as `base.restrain(...)`,
+object name and owner model; methods such as `base.fix()`,
 `top.coordinates()`, and `col.forces()` round-trip to SAP2000 each time.
 
 ## Loads

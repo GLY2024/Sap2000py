@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sap2000py import DOF, SapClient, Units
+from sap2000py import SapClient, Units
 
 
 def main() -> None:
@@ -26,8 +26,8 @@ def main() -> None:
         m.frame_sections.add_rectangle("BEAM", material="STEEL", depth=0.5, width=0.3)
 
         # Geometry: a 4 m x 3 m portal, fixed at the bases.
-        b1 = m.points.add(0, 0, 0).restrain(DOF.fixed())
-        b2 = m.points.add(4, 0, 0).restrain(DOF.fixed())
+        b1 = m.points.add(0, 0, 0).fix()
+        b2 = m.points.add(4, 0, 0).fix()
         t1 = m.points.add(0, 0, 3)
         t2 = m.points.add(4, 0, 3)
 

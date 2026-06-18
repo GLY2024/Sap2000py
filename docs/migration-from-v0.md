@@ -59,7 +59,7 @@ the old fallback behavior, made explicit.
 | `Sap.is_locked` | `client.model.is_locked` |
 | `Sap.SapVersion` | `client.version` |
 | `Sap.Assign.PointObj.AddCartesian(...)` | `client.model.points.add(x, y, z)` |
-| `Sap.Assign.PointObj.Set.Restraint(...)` | `client.model.points.ref(p).restrain(DOF.fixed())` |
+| `Sap.Assign.PointObj.Set.Restraint(...)` | `client.model.points.ref(p).fix()` |
 | any unwrapped OAPI call | `client.api.<Object>.<Method>(...)` |
 
 ## Strings vs handles
@@ -69,8 +69,8 @@ stores the object name and owner model, not cached SAP2000 state:
 
 ```python
 p1 = model.points.add(0, 0, 0)     # PointHandle
-p1.restrain(DOF.fixed())
-model.points.ref("P1").restrain(DOF.fixed())     # bind a raw name to this model
+p1.fix()
+model.points.ref("P1").fix()       # bind a raw name to this model
 ```
 
 ## Errors instead of silent failures

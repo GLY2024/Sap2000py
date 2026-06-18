@@ -126,6 +126,33 @@ def test_point_handle_restrain_is_chainable(make_model) -> None:
     assert h.called("PointObj.SetRestraint") == [("P1", [True] * 6, int(ItemType.OBJECT))]
 
 
+def test_point_handle_restrain_accepts_dof_name_varargs(make_model) -> None:
+    h = make_model({"PointObj.SetRestraint": 0})
+    h.model.points.ref("P1").restrain("U1", "U3", "R2")
+    (args,) = h.called("PointObj.SetRestraint")
+    assert args == ("P1", [True, False, True, False, True, False], int(ItemType.OBJECT))
+
+
+def test_point_handle_restrain_no_args_raises(make_model) -> None:
+    h = make_model({"PointObj.SetRestraint": 0})
+    with pytest.raises(ValueError, match="at least one DOF"):
+        h.model.points.ref("P1").restrain()
+    assert h.called("PointObj.SetRestraint") == []
+
+
+def test_point_handle_fix_pin_free(make_model) -> None:
+    h = make_model({"PointObj.SetRestraint": 0})
+    p = h.model.points.ref("P1")
+    assert p.fix() is p
+    assert p.pin() is p
+    assert p.free() is p
+    assert h.called("PointObj.SetRestraint") == [
+        ("P1", [True] * 6, int(ItemType.OBJECT)),
+        ("P1", [True, True, True, False, False, False], int(ItemType.OBJECT)),
+        ("P1", [False] * 6, int(ItemType.OBJECT)),
+    ]
+
+
 def test_ownerless_point_handle_methods_require_model_binding() -> None:
     p = PointHandle("P1")
     with pytest.raises(ValueError, match=r"m.points.ref\('P1'\)"):

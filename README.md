@@ -29,7 +29,7 @@ foundation.
 ## Design at a glance
 
 ```python
-from sap2000py import DOF, SapClient, Units
+from sap2000py import SapClient, Units
 
 with SapClient.launch(version="25", visible=False, units=Units.KN_M_C) as client:
     m = client.model
@@ -38,8 +38,9 @@ with SapClient.launch(version="25", visible=False, units=Units.KN_M_C) as client
     c40 = m.materials.add_concrete("C40", code="JTG")
     sec = m.frame_sections.add_rectangle("Pier", material=c40, depth=2.0, width=1.0)
 
-    p1 = m.points.add(0, 0, 0).restrain(DOF.fixed())
+    p1 = m.points.add(0, 0, 0)
     p2 = m.points.add(0, 0, 10)
+    p1.fix()
     col = m.frames.add_by_points(p1, p2, section=sec)
 
     m.analysis.run(cases=["DEAD"])

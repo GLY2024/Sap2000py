@@ -69,7 +69,7 @@ class FrameHandle(Handle):
         )
         return self
 
-    def stations(
+    def set_output_stations(
         self,
         *,
         min_stations: int | None = None,

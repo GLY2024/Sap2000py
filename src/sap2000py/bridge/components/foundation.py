@@ -51,5 +51,5 @@ class Foundation(BridgeComponent):
             base.restrain(self.fix_dof or DOF.fixed())
         else:
             assert self.stiffness is not None  # guarded in __init__
-            base.spring(self.stiffness)
+            base.set_spring(self.stiffness)
         self._set_anchor("top", base)
