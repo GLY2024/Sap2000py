@@ -4,8 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from sap2000py import FrameHandle, FrameSectionHandle, MaterialHandle, PointHandle
-from sap2000py.enums import ItemTypeElm, LoadPatternType, MatType
+from sap2000py import (
+    FrameHandle,
+    FrameSectionHandle,
+    LinkHandle,
+    LinkPropHandle,
+    MaterialHandle,
+    PointHandle,
+)
+from sap2000py.enums import ItemType, ItemTypeElm, LoadPatternType, MatType
 from sap2000py.errors import SapAnalysisError, SapApiError, SapError
 from sap2000py.model.results import ResultTable
 
@@ -104,6 +111,82 @@ def test_add_by_points_rejects_wrong_handle_type(make_model) -> None:
     assert h.called("FrameObj.AddByPoint") == []
 
 
+def test_frame_handle_assign_section_accepts_string_and_handle(make_model) -> None:
+    h = make_model({"FrameObj.SetSection": 0})
+    f = h.model.frames.ref("F1")
+
+    assert f.assign_section("R1") is f
+    assert f.assign_section(h.model.frame_sections.ref("R2")) is f
+
+    assert h.called("FrameObj.SetSection") == [
+        ("F1", "R1", int(ItemType.OBJECT)),
+        ("F1", "R2", int(ItemType.OBJECT)),
+    ]
+
+
+def test_frame_handle_rotate_passes_angle_and_itemtype(make_model) -> None:
+    h = make_model({"FrameObj.SetLocalAxes": 0})
+    f = h.model.frames.ref("F1")
+
+    assert f.rotate(15) is f
+
+    assert h.called("FrameObj.SetLocalAxes") == [("F1", 15.0, int(ItemType.OBJECT))]
+
+
+def test_frame_handle_length_uses_endpoint_coordinates(make_model) -> None:
+    def coord(name: str, *_args: object) -> tuple[float, float, float, int]:
+        if name == "P1":
+            return (0.0, 0.0, 0.0, 0)
+        return (3.0, 4.0, 0.0, 0)
+
+    h = make_model({"FrameObj.GetPoints": ("P1", "P2", 0), "PointObj.GetCoordCartesian": coord})
+
+    assert h.model.frames.ref("F1").length == pytest.approx(5.0)
+    assert h.called("FrameObj.GetPoints") == [("F1", "", "")]
+    assert h.called("PointObj.GetCoordCartesian") == [
+        ("P1", 0.0, 0.0, 0.0, "Global"),
+        ("P2", 0.0, 0.0, 0.0, "Global"),
+    ]
+
+
+def test_frame_handle_delete_passes_name_and_itemtype(make_model) -> None:
+    h = make_model({"FrameObj.Delete": 0})
+
+    h.model.frames.ref("F1").delete()
+
+    assert h.called("FrameObj.Delete") == [("F1", int(ItemType.OBJECT))]
+
+
+def test_add_by_coord_returns_handle(make_model) -> None:
+    h = make_model({"FrameObj.AddByCoord": ["F1", 0]})
+
+    f = h.model.frames.add_by_coord(
+        (0, 1, 2),
+        (3, 4, 5),
+        section=h.model.frame_sections.ref("R"),
+        name="F-user",
+        csys="Bridge",
+    )
+
+    assert isinstance(f, FrameHandle)
+    assert f.name == "F1"
+    assert h.called("FrameObj.AddByCoord") == [
+        (0.0, 1.0, 2.0, 3.0, 4.0, 5.0, "", "R", "F-user", "Bridge")
+    ]
+
+
+def test_frames_count_uses_value_path(make_model) -> None:
+    h = make_model({"FrameObj.Count": 3})
+
+    assert h.model.frames.count() == 3
+
+
+def test_frames_names_returns_list(make_model) -> None:
+    h = make_model({"FrameObj.GetNameList": (2, ("F1", "F2"), 0)})
+
+    assert h.model.frames.names() == ["F1", "F2"]
+
+
 def test_frame_handle_release_validates_lengths(make_model) -> None:
     h = make_model({"FrameObj.SetReleases": 0})
     with pytest.raises(ValueError, match="6 elements"):
@@ -131,6 +214,115 @@ def test_output_stations_max_segment(make_model) -> None:
     h.model.frames.ref("F1").set_output_stations(max_segment_size=0.5)
     (args,) = h.called("FrameObj.SetOutputStations")
     assert args == ("F1", 1, 0.5, 2, False, False, 0)
+
+
+# -- links ------------------------------------------------------------------
+
+
+def test_link_props_add_linear_returns_handle_and_passes_args(make_model) -> None:
+    h = make_model({"PropLink.SetLinear": 0})
+
+    prop = h.model.link_props.add_linear(
+        "LP1",
+        [1, 2, 3, 4, 5, 6],
+        damping=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        dof=["U1", "R3"],
+        fixed="U1",
+        notes="bearing",
+    )
+
+    assert isinstance(prop, LinkPropHandle)
+    assert prop.name == "LP1"
+    assert prop._owner is h.model.link_props
+    assert h.called("PropLink.SetLinear") == [
+        (
+            "LP1",
+            [True, False, False, False, False, True],
+            [True, False, False, False, False, False],
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+            0.0,
+            0.0,
+            False,
+            False,
+            "bearing",
+            "",
+        )
+    ]
+
+
+def test_link_props_add_linear_validates_lengths(make_model) -> None:
+    h = make_model({"PropLink.SetLinear": 0})
+
+    with pytest.raises(ValueError, match="stiffness must have 6 elements"):
+        h.model.link_props.add_linear("LP1", [1.0, 2.0])
+    with pytest.raises(ValueError, match="damping must have 6 elements"):
+        h.model.link_props.add_linear("LP1", [1.0] * 6, damping=[1.0])
+
+    assert h.called("PropLink.SetLinear") == []
+
+
+def test_link_props_names_returns_list(make_model) -> None:
+    h = make_model({"PropLink.GetNameList": (2, ("LP1", "LP2"), 0)})
+
+    assert h.model.link_props.names() == ["LP1", "LP2"]
+
+
+def test_link_prop_handle_delete_passes_name(make_model) -> None:
+    h = make_model({"PropLink.Delete": 0})
+
+    h.model.link_props.ref("LP1").delete()
+
+    assert h.called("PropLink.Delete") == [("LP1",)]
+
+
+def test_links_add_by_points_returns_handle_and_passes_args(make_model) -> None:
+    h = make_model({"LinkObj.AddByPoint": ["L1", 0]})
+
+    link = h.model.links.add_by_points(
+        h.model.points.ref("P1"),
+        "P2",
+        h.model.link_props.ref("LP1"),
+        name="L-user",
+        single_joint=True,
+    )
+
+    assert isinstance(link, LinkHandle)
+    assert link.name == "L1"
+    assert h.called("LinkObj.AddByPoint") == [
+        ("P1", "P2", "", True, "LP1", "L-user")
+    ]
+
+
+def test_links_add_by_points_rejects_wrong_handle_type(make_model) -> None:
+    h = make_model({"LinkObj.AddByPoint": ["L1", 0]})
+
+    with pytest.raises(TypeError, match="expected PointHandle"):
+        h.model.links.add_by_points(FrameHandle("P1"), "P2", "LP1")
+    with pytest.raises(TypeError, match="expected LinkPropHandle"):
+        h.model.links.add_by_points("P1", "P2", FrameSectionHandle("LP1"))
+
+    assert h.called("LinkObj.AddByPoint") == []
+
+
+def test_link_handle_delete_passes_name(make_model) -> None:
+    h = make_model({"LinkObj.Delete": 0})
+
+    h.model.links.ref("L1").delete()
+
+    assert h.called("LinkObj.Delete") == [("L1",)]
+
+
+def test_links_count_uses_value_path(make_model) -> None:
+    h = make_model({"LinkObj.Count": 4})
+
+    assert h.model.links.count() == 4
+
+
+def test_links_names_returns_list(make_model) -> None:
+    h = make_model({"LinkObj.GetNameList": (2, ("L1", "L2"), 0)})
+
+    assert h.model.links.names() == ["L1", "L2"]
 
 
 # -- loads ------------------------------------------------------------------

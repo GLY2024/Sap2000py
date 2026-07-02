@@ -160,6 +160,79 @@ def test_point_handle_fix_pin_free(make_model) -> None:
     ]
 
 
+def test_point_handle_set_spring_passes_stiffness_flags_and_itemtype(make_model) -> None:
+    h = make_model({"PointObj.SetSpring": 0})
+    p = h.model.points.ref("P1")
+
+    assert p.set_spring([1, 2, 3, 4, 5, 6], local_csys=True, replace=False) is p
+
+    assert h.called("PointObj.SetSpring") == [
+        ("P1", [1.0, 2.0, 3.0, 4.0, 5.0, 6.0], int(ItemType.OBJECT), True, False)
+    ]
+
+
+def test_point_handle_set_spring_validates_length(make_model) -> None:
+    h = make_model({"PointObj.SetSpring": 0})
+
+    with pytest.raises(ValueError, match="6 elements"):
+        h.model.points.ref("P1").set_spring([1.0, 2.0])
+
+    assert h.called("PointObj.SetSpring") == []
+
+
+def test_point_handle_constrain_passes_name_replace_and_itemtype(make_model) -> None:
+    h = make_model({"PointObj.SetConstraint": 0})
+    p = h.model.points.ref("P1")
+
+    assert p.constrain("C1", replace=True) is p
+
+    assert h.called("PointObj.SetConstraint") == [
+        ("P1", "C1", int(ItemType.OBJECT), True)
+    ]
+
+
+def test_point_handle_reactions_delegates_to_results(
+    make_model, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    h = make_model()
+    p = h.model.points.ref("P1")
+    seen: list[PointHandle] = []
+
+    def joint_reactions(point: PointHandle) -> str:
+        seen.append(point)
+        return "reactions"
+
+    monkeypatch.setattr(h.model.results, "joint_reactions", joint_reactions)
+
+    assert p.reactions() == "reactions"
+    assert seen == [p]
+
+
+def test_point_handle_displacements_delegates_to_results(
+    make_model, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    h = make_model()
+    p = h.model.points.ref("P1")
+    seen: list[PointHandle] = []
+
+    def joint_displacements(point: PointHandle) -> str:
+        seen.append(point)
+        return "displacements"
+
+    monkeypatch.setattr(h.model.results, "joint_displacements", joint_displacements)
+
+    assert p.displacements() == "displacements"
+    assert seen == [p]
+
+
+def test_point_handle_delete_passes_name_and_itemtype(make_model) -> None:
+    h = make_model({"PointObj.Delete": 0})
+
+    h.model.points.ref("P1").delete()
+
+    assert h.called("PointObj.Delete") == [("P1", int(ItemType.OBJECT))]
+
+
 def test_ownerless_point_handle_methods_require_model_binding() -> None:
     p = PointHandle("P1")
     with pytest.raises(ValueError, match=r"m.points.ref\('P1'\)"):
