@@ -14,7 +14,13 @@ import pytest
 import sap2000py.client as client_module
 from sap2000py.client import SapClient
 from sap2000py.discovery import Installation
-from sap2000py.errors import SapApiError, SapVersionMismatchError, SapVersionNotFoundError
+from sap2000py.errors import (
+    SapApiError,
+    SapConnectionError,
+    SapVersionMismatchError,
+    SapVersionNotFoundError,
+)
+from sap2000py.gateway import ErrorPolicy
 
 
 class FakeSapObject:
@@ -57,6 +63,7 @@ class FakeHelper:
         self.obj = obj
         self.created_paths: list[str] = []
         self.created_progids: list[str] = []
+        self.attached_progids: list[str] = []
 
     def CreateObject(self, path: str) -> FakeSapObject:
         self.created_paths.append(path)
@@ -66,9 +73,58 @@ class FakeHelper:
         self.created_progids.append(progid)
         return self.obj
 
+    def GetObject(self, progid: str) -> FakeSapObject:
+        self.attached_progids.append(progid)
+        return self.obj
+
 
 def make_client(exit_statuses: list[int], *, owns_process: bool = True) -> SapClient:
     return SapClient(FakeSapObject(exit_statuses), owns_process=owns_process)
+
+
+def test_attach_uses_running_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    obj = FakeSapObject([0])
+    helper = FakeHelper(obj)
+    monkeypatch.setattr(client_module, "_make_helper", lambda: helper)
+
+    client = SapClient.attach(policy=ErrorPolicy.WARN)
+
+    assert client.raw_object is obj
+    assert client.error_policy is ErrorPolicy.WARN
+    assert helper.attached_progids == ["CSI.SAP2000.API.SapObject"]
+
+
+def test_attach_raises_when_no_running_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    class MissingHelper:
+        def GetObject(self, _progid: str) -> None:
+            raise OSError("not running")
+
+    monkeypatch.setattr(client_module, "_make_helper", MissingHelper)
+
+    with pytest.raises(SapConnectionError, match="No running SAP2000 instance"):
+        SapClient.attach()
+
+
+def test_installations_delegates_to_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    discovered = [Installation(version="25.1.0", major=25, path=Path("C:/SAP25/SAP2000.exe"))]
+    monkeypatch.setattr(client_module, "installations", lambda: discovered)
+
+    assert SapClient.installations() is discovered
+
+
+def test_error_policy_getter_and_setter() -> None:
+    client = make_client([0])
+
+    assert client.error_policy is ErrorPolicy.RAISE
+    client.error_policy = ErrorPolicy.WARN
+    assert client.error_policy is ErrorPolicy.WARN
+
+
+def test_raw_model_returns_underlying_sap_model() -> None:
+    obj = FakeSapObject([0])
+    client = SapClient(obj, owns_process=False)
+
+    assert client.raw_model is obj.SapModel
 
 
 def test_close_exits_owned_process_once() -> None:

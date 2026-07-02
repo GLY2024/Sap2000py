@@ -727,6 +727,28 @@ def test_frame_handle_forces_keeps_original_error_when_output_probe_fails(make_m
     assert h.called("LoadCases.GetNameList") == [()]
 
 
+def test_frame_handle_forces_keeps_original_error_when_combo_output_is_selected(
+    make_model,
+) -> None:
+    h = make_model(
+        {
+            "Results.FrameForce": 7,
+            "LoadCases.GetNameList": (0, (), 0),
+            "RespCombo.GetNameList": (1, ("COMB1",), 0),
+            "Results.Setup.GetComboSelectedForOutput": (True, 0),
+        }
+    )
+
+    with pytest.raises(SapApiError, match="status 7") as info:
+        h.model.frames.ref("F1").forces()
+
+    assert info.value.hint == ""
+    assert h.called("Results.FrameForce") == [("F1", int(ItemTypeElm.OBJECT_ELM))]
+    assert h.called("LoadCases.GetNameList") == [()]
+    assert h.called("RespCombo.GetNameList") == [()]
+    assert h.called("Results.Setup.GetComboSelectedForOutput") == [("COMB1", False)]
+
+
 def test_result_batch_group_is_lazy_and_does_not_select_when_cases_omitted(make_model) -> None:
     h = make_model(
         {**_selected_output_responses(), "Results.FrameForce": _frame_force_result("G1")}
@@ -765,6 +787,41 @@ def test_result_batch_selects_output_once_when_cases_are_given(make_model) -> No
     assert h.called("Results.JointReact") == [("supports", int(ItemTypeElm.GROUP_ELM))]
 
 
+def test_result_batch_modal_periods_uses_default_key_and_combo_selection(make_model) -> None:
+    h = make_model(
+        {
+            "Results.Setup.DeselectAllCasesAndCombosForOutput": 0,
+            "Results.Setup.SetComboSelectedForOutput": 0,
+            "Results.ModalPeriod": (
+                1,
+                ("MODAL",),
+                ("Mode",),
+                (1,),
+                (0.5,),
+                (2.0,),
+                (12.6,),
+                (158.0,),
+                0,
+            ),
+        }
+    )
+
+    tables = h.model.results.batch(combos=["COMB1"]).modal_periods().collect()
+
+    assert set(tables) == {"modal_periods"}
+    assert tables["modal_periods"]["mode"] == (1,)
+    assert h.called("Results.Setup.DeselectAllCasesAndCombosForOutput") == [()]
+    assert h.called("Results.Setup.SetCaseSelectedForOutput") == []
+    assert h.called("Results.Setup.SetComboSelectedForOutput") == [("COMB1", True)]
+
+
+def test_result_batch_rejects_duplicate_default_keys(make_model) -> None:
+    h = make_model()
+
+    with pytest.raises(ValueError, match="duplicate result batch key 'modal_periods'"):
+        h.model.results.batch().modal_periods().modal_periods()
+
+
 def test_result_batch_selection_reads_current_sap_selection_without_mutating_it(make_model) -> None:
     h = make_model(
         {**_selected_output_responses(), "Results.FrameForce": _frame_force_result("F1")}
@@ -790,6 +847,15 @@ def test_result_batch_frames_default_to_object_reads_without_temp_group(make_mod
     ]
     assert h.called("GroupDef.SetGroup") == []
     assert h.called("GroupDef.Delete") == []
+
+
+def test_result_batch_rejects_missing_or_ambiguous_single_target(make_model) -> None:
+    h = make_model()
+
+    with pytest.raises(ValueError, match="provide exactly one result target"):
+        h.model.results.batch().frame_forces()
+    with pytest.raises(ValueError, match="provide exactly one result target"):
+        h.model.results.batch().frame_forces(frame="F1", group="G1")
 
 
 def test_result_batch_rejects_unknown_strategy(make_model) -> None:
@@ -851,6 +917,16 @@ def test_result_batch_temporary_group_is_deleted_when_read_fails(make_model) -> 
     assert h.called("GroupDef.Delete") == [(group_name,)]
 
 
+def test_result_batch_joint_displacement_single_target_uses_object_read(make_model) -> None:
+    h = make_model({"Results.JointDispl": _joint_displ_result("P1")})
+
+    tables = h.model.results.batch().joint_displacements(point="P1", key="displ").collect()
+
+    assert tables["displ"]["U1"] == (1.0,)
+    assert h.called("Results.JointDispl") == [("P1", int(ItemTypeElm.OBJECT_ELM))]
+    assert h.called("GroupDef.SetGroup") == []
+
+
 def test_result_batch_points_default_to_object_reads_without_temp_group(make_model) -> None:
     h = make_model(
         {
@@ -868,6 +944,33 @@ def test_result_batch_points_default_to_object_reads_without_temp_group(make_mod
     ]
     assert h.called("GroupDef.SetGroup") == []
     assert h.called("GroupDef.Delete") == []
+
+
+def test_result_batch_point_reactions_temporary_group_is_explicit_opt_in(make_model) -> None:
+    h = make_model(
+        {
+            "GroupDef.SetGroup": 0,
+            "PointObj.SetGroupAssign": 0,
+            "GroupDef.Delete": 0,
+            "Results.JointReact": lambda name, _item_type: _joint_react_result(name),
+        }
+    )
+
+    tables = (
+        h.model.results.batch()
+        .joint_reactions(points=["P1", "P2"], key="reactions", strategy="temporary_group")
+        .collect()
+    )
+
+    assert tables["reactions"]["F1"] == (1.0,)
+    (group_name,) = h.called("GroupDef.SetGroup")[0]
+    assert group_name.startswith("__sap2000py_results_")
+    assert h.called("PointObj.SetGroupAssign") == [
+        ("P1", group_name, False, 0),
+        ("P2", group_name, False, 0),
+    ]
+    assert h.called("Results.JointReact") == [(group_name, int(ItemTypeElm.GROUP_ELM))]
+    assert h.called("GroupDef.Delete") == [(group_name,)]
 
 
 def test_result_batch_points_temporary_group_is_explicit_opt_in(make_model) -> None:
@@ -900,6 +1003,7 @@ def test_result_batch_points_temporary_group_is_explicit_opt_in(make_model) -> N
 
 def test_result_table_rows_and_empty() -> None:
     table = ResultTable({"a": (1, 2), "b": ("x", "y")})
+    assert table.names == ["a", "b"]
     assert table.rows() == [{"a": 1, "b": "x"}, {"a": 2, "b": "y"}]
     assert len(ResultTable({})) == 0
 
