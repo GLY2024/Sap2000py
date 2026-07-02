@@ -19,6 +19,26 @@ from sap2000py.model.results import ResultTable
 # -- materials --------------------------------------------------------------
 
 
+def test_materials_add_returns_handle_and_passes_args(make_model) -> None:
+    h = make_model({"PropMaterial.AddMaterial": ["AUTO-S355", 0], "PropMaterial.ChangeName": 0})
+
+    mat = h.model.materials.add(
+        "S355",
+        MatType.STEEL,
+        grade="EN 1993-1-1 S355",
+        region="Europe",
+        standard="EN",
+    )
+
+    assert isinstance(mat, MaterialHandle)
+    assert mat.name == "S355"
+    assert mat._owner is h.model.materials
+    assert h.called("PropMaterial.AddMaterial") == [
+        ("", int(MatType.STEEL), "Europe", "EN", "EN 1993-1-1 S355")
+    ]
+    assert h.called("PropMaterial.ChangeName") == [("AUTO-S355", "S355")]
+
+
 def test_add_concrete_builds_grade_string_and_renames(make_model) -> None:
     h = make_model({"PropMaterial.AddMaterial": ["JTG-C40", 0], "PropMaterial.ChangeName": 0})
     mat = h.model.materials.add_concrete("C40", grade="C40", code="JTG")
@@ -56,6 +76,37 @@ def test_add_isotropic_sets_properties(make_model) -> None:
     assert h.called("PropMaterial.SetWeightAndMass") == [("S", 1, 78.5)]
 
 
+def test_material_handle_set_weight_per_volume_passes_value_and_is_chainable(
+    make_model,
+) -> None:
+    h = make_model({"PropMaterial.SetWeightAndMass": 0})
+    mat = h.model.materials.ref("C40")
+
+    assert mat.set_weight_per_volume(25) is mat
+
+    assert h.called("PropMaterial.SetWeightAndMass") == [("C40", 1, 25.0)]
+
+
+def test_material_handle_delete_passes_name(make_model) -> None:
+    h = make_model({"PropMaterial.Delete": 0})
+
+    h.model.materials.ref("C40").delete()
+
+    assert h.called("PropMaterial.Delete") == [("C40",)]
+
+
+def test_materials_names_empty_model(make_model) -> None:
+    h = make_model({"PropMaterial.GetNameList": (0, None, 0)})
+
+    assert h.model.materials.names() == []
+
+
+def test_materials_names_returns_list(make_model) -> None:
+    h = make_model({"PropMaterial.GetNameList": (2, ("C40", "S355"), 0)})
+
+    assert h.model.materials.names() == ["C40", "S355"]
+
+
 # -- frame sections ---------------------------------------------------------
 
 
@@ -64,6 +115,67 @@ def test_add_rectangle_args(make_model) -> None:
     h.model.frame_sections.add_rectangle("R", material="C40", depth=2.0, width=1.0)
     (args,) = h.called("PropFrame.SetRectangle")
     assert args == ("R", "C40", 2.0, 1.0, -1, "", "")
+
+
+def test_add_circle_returns_handle_and_passes_args(make_model) -> None:
+    h = make_model({"PropFrame.SetCircle": 0})
+
+    section = h.model.frame_sections.add_circle(
+        "CIRC",
+        material="C40",
+        diameter=0.75,
+        notes="solid",
+    )
+
+    assert isinstance(section, FrameSectionHandle)
+    assert section.name == "CIRC"
+    assert section._owner is h.model.frame_sections
+    assert h.called("PropFrame.SetCircle") == [("CIRC", "C40", 0.75, -1, "solid", "")]
+
+
+def test_add_general_returns_handle_and_passes_args(make_model) -> None:
+    h = make_model({"PropFrame.SetGeneral": 0})
+
+    section = h.model.frame_sections.add_general(
+        "GEN",
+        material=h.model.materials.ref("C40"),
+        depth=2,
+        width=1,
+        area=1.5,
+        as2=0.8,
+        as3=0.9,
+        torsion=0.12,
+        i22=0.21,
+        i33=0.34,
+        notes="explicit",
+    )
+
+    assert isinstance(section, FrameSectionHandle)
+    assert section.name == "GEN"
+    assert section._owner is h.model.frame_sections
+    assert h.called("PropFrame.SetGeneral") == [
+        (
+            "GEN",
+            "C40",
+            2.0,
+            1.0,
+            1.5,
+            0.8,
+            0.9,
+            0.12,
+            0.21,
+            0.34,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            -1,
+            "explicit",
+            "",
+        )
+    ]
 
 
 def test_add_rectangle_rejects_foreign_material_handle(make_model) -> None:
@@ -79,6 +191,26 @@ def test_frame_section_handle_set_modifiers_validates_length(make_model) -> None
     h = make_model({"PropFrame.SetModifiers": 0})
     with pytest.raises(ValueError, match="8 elements"):
         h.model.frame_sections.ref("R").set_modifiers([1.0, 1.0])
+
+
+def test_frame_section_handle_delete_passes_name(make_model) -> None:
+    h = make_model({"PropFrame.Delete": 0})
+
+    h.model.frame_sections.ref("R").delete()
+
+    assert h.called("PropFrame.Delete") == [("R",)]
+
+
+def test_frame_sections_names_empty_model(make_model) -> None:
+    h = make_model({"PropFrame.GetNameList": (0, None, 0)})
+
+    assert h.model.frame_sections.names() == []
+
+
+def test_frame_sections_names_returns_list(make_model) -> None:
+    h = make_model({"PropFrame.GetNameList": (2, ("R1", "CIRC"), 0)})
+
+    assert h.model.frame_sections.names() == ["R1", "CIRC"]
 
 
 # -- frames -----------------------------------------------------------------
@@ -214,6 +346,65 @@ def test_output_stations_max_segment(make_model) -> None:
     h.model.frames.ref("F1").set_output_stations(max_segment_size=0.5)
     (args,) = h.called("FrameObj.SetOutputStations")
     assert args == ("F1", 1, 0.5, 2, False, False, 0)
+
+
+# -- constraints ------------------------------------------------------------
+
+
+def test_constraints_add_body_defaults_to_all_dof(make_model) -> None:
+    h = make_model({"ConstraintDef.SetBody": 0})
+
+    assert h.model.constraints.add_body("BODY") == "BODY"
+
+    assert h.called("ConstraintDef.SetBody") == [("BODY", [True] * 6, "Global")]
+
+
+def test_constraints_add_body_accepts_explicit_dof_and_csys(make_model) -> None:
+    h = make_model({"ConstraintDef.SetBody": 0})
+
+    assert h.model.constraints.add_body("BODY", dof=("U1", "R3"), csys="Local") == "BODY"
+
+    assert h.called("ConstraintDef.SetBody") == [
+        ("BODY", [True, False, False, False, False, True], "Local")
+    ]
+
+
+def test_constraints_add_equal_defaults_to_all_dof(make_model) -> None:
+    h = make_model({"ConstraintDef.SetEqual": 0})
+
+    assert h.model.constraints.add_equal("EQ") == "EQ"
+
+    assert h.called("ConstraintDef.SetEqual") == [("EQ", [True] * 6, "Global")]
+
+
+def test_constraints_add_equal_accepts_explicit_dof_and_csys(make_model) -> None:
+    h = make_model({"ConstraintDef.SetEqual": 0})
+
+    assert h.model.constraints.add_equal("EQ", dof=("U2", "R1"), csys="Joint") == "EQ"
+
+    assert h.called("ConstraintDef.SetEqual") == [
+        ("EQ", [False, True, False, True, False, False], "Joint")
+    ]
+
+
+def test_constraints_names_empty_model(make_model) -> None:
+    h = make_model({"ConstraintDef.GetNameList": (0, None, 0)})
+
+    assert h.model.constraints.names() == []
+
+
+def test_constraints_names_returns_list(make_model) -> None:
+    h = make_model({"ConstraintDef.GetNameList": (2, ("BODY", "EQ"), 0)})
+
+    assert h.model.constraints.names() == ["BODY", "EQ"]
+
+
+def test_constraints_delete_passes_name(make_model) -> None:
+    h = make_model({"ConstraintDef.Delete": 0})
+
+    h.model.constraints.delete("BODY")
+
+    assert h.called("ConstraintDef.Delete") == [("BODY",)]
 
 
 # -- links ------------------------------------------------------------------
@@ -739,3 +930,23 @@ def test_point_group_assignment(make_model) -> None:
     assert p.group(g) is p
     assert h.called("GroupDef.SetGroup") == [("supports",)]
     assert h.called("PointObj.SetGroupAssign") == [("P1", "supports", False, 0)]
+
+
+def test_group_handle_delete_passes_name(make_model) -> None:
+    h = make_model({"GroupDef.Delete": 0})
+
+    h.model.groups.ref("supports").delete()
+
+    assert h.called("GroupDef.Delete") == [("supports",)]
+
+
+def test_groups_names_empty_model(make_model) -> None:
+    h = make_model({"GroupDef.GetNameList": (0, None, 0)})
+
+    assert h.model.groups.names() == []
+
+
+def test_groups_names_returns_list(make_model) -> None:
+    h = make_model({"GroupDef.GetNameList": (2, ("piers", "supports"), 0)})
+
+    assert h.model.groups.names() == ["piers", "supports"]
