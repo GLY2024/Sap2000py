@@ -5,9 +5,8 @@ from __future__ import annotations
 from ..errors import SapCompatibilityError
 
 _FRAME_OUTPUT_STATIONS_ARITY: dict[int, int] = {
-    24: 5,
+    # Verified against SAP2000 25 CSI_OAPI_Documentation.chm / SAP2000v1.tlb.
     25: 6,
-    26: 6,
 }
 
 
@@ -30,4 +29,3 @@ def frame_output_stations_args(
         )
     args: tuple[object, ...] = (my_type, max_seg, min_sec, no_ends, no_ptloads, item_type)
     return args if arity == 6 else args[:-1]
-

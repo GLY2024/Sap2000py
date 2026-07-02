@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from math import dist
 from typing import Any, ClassVar
 
-from ..enums import ItemType, to_dof_mask
+from ..enums import DofSpec, ItemType, to_dof_mask
 from ..handles import Handle
 from ._base import Manager
 from ._compat import frame_output_stations_args
 from .frame_sections import FrameSectionHandle
 from .groups import GroupHandle
 from .points import PointHandle
-
-DofSpec = str | Sequence[str] | Sequence[bool] | None
 
 
 @dataclass(frozen=True)

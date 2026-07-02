@@ -12,11 +12,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import ClassVar
 
-from ..enums import to_dof_mask
+from ..enums import DofSpec, to_dof_mask
 from ..handles import Handle
 from ._base import Manager
-
-DofSpec = str | Sequence[str] | Sequence[bool] | None
 
 
 @dataclass(frozen=True)

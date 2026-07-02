@@ -8,13 +8,9 @@ to pier, pier-top to bearing-bottom) without modelling stiff link elements.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-
-from ..enums import to_dof_mask
+from ..enums import DofSpec, to_dof_mask
 from ..handles import Handle
 from ._base import Manager
-
-DofSpec = str | Sequence[str] | Sequence[bool] | None
 
 
 class Constraints(Manager[Handle]):

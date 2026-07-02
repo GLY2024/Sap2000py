@@ -14,6 +14,8 @@ from enum import IntEnum
 #: Canonical order of the six degrees of freedom in the OAPI.
 DOF_NAMES: tuple[str, ...] = ("U1", "U2", "U3", "R1", "R2", "R3")
 
+DofSpec = str | Sequence[str] | Sequence[bool] | None
+
 
 class Units(IntEnum):
     """SAP2000 ``eUnits`` enumeration (force_length_temperature).
@@ -116,9 +118,12 @@ def dof_mask(names: Iterable[str]) -> list[bool]:
     >>> dof_mask(["U1", "R3"])
     [True, False, False, False, False, True]
     """
+    values = list(names)
+    if not values:
+        raise ValueError("DOF name sequence cannot be empty.")
     index = {name: i for i, name in enumerate(DOF_NAMES)}
     mask = [False] * 6
-    for raw in names:
+    for raw in values:
         key = raw.upper()
         if key not in index:
             raise ValueError(f"{raw!r} is not a valid DOF; expected one of {DOF_NAMES}.")
@@ -126,9 +131,7 @@ def dof_mask(names: Iterable[str]) -> list[bool]:
     return mask
 
 
-def to_dof_mask(
-    spec: str | Sequence[str] | Sequence[bool] | None, *, default: bool = False
-) -> list[bool]:
+def to_dof_mask(spec: DofSpec, *, default: bool = False) -> list[bool]:
     """Normalize a DOF spec to ``[U1, U2, U3, R1, R2, R3]`` booleans."""
     if spec is None:
         return [default] * 6

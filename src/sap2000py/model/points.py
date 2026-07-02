@@ -6,9 +6,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from ..enums import DOF, ItemType, to_dof_mask
+from ..enums import DOF, DofSpec, ItemType, to_dof_mask
 from ..handles import Handle
 from ._base import Manager
+from .groups import GroupHandle
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class PointHandle(Handle):
         )
         return self
 
-    def restrain(self, *dof: str | Sequence[str] | Sequence[bool]) -> PointHandle:
+    def restrain(self, *dof: DofSpec) -> PointHandle:
         """Set point restraints and return ``self`` for chaining.
 
         Accepts DOF names as varargs (``restrain("U1", "R2")``), a single DOF
@@ -39,13 +40,29 @@ class PointHandle(Handle):
         if not dof:
             raise ValueError("restrain() needs at least one DOF; use free() to clear restraints.")
         if len(dof) == 1:
-            spec: str | Sequence[str] | Sequence[bool] = dof[0]
+            spec = dof[0]
         else:
             names = [d for d in dof if isinstance(d, str)]
             if len(names) != len(dof):
                 raise ValueError("restrain() with multiple arguments expects DOF names.")
             spec = names
+        if spec is None:
+            raise ValueError("restrain() needs at least one DOF; use free() to clear restraints.")
         return self._set_restraint(to_dof_mask(spec))
+
+    def group(self, group: GroupHandle | str, *, remove: bool = False) -> PointHandle:
+        """Add or remove this point from a group and return ``self``."""
+        owner = self._require_owner()
+        group_ref = owner._model.groups.ref(group)
+        owner._g.call(
+            owner._raw.PointObj.SetGroupAssign,
+            self.name,
+            group_ref.name,
+            remove,
+            int(ItemType.OBJECT),
+            api_name="PointObj.SetGroupAssign",
+        )
+        return self
 
     def fix(self) -> PointHandle:
         """Fully restrain all six DOF (a fixed support). Returns ``self``."""

@@ -302,16 +302,27 @@ def test_frame_handle_forces_does_not_select_output(make_model) -> None:
     table = h.model.frames.ref("F1").forces()
     assert table["P"] == (1.0,)
     assert h.called("Results.Setup.DeselectAllCasesAndCombosForOutput") == []
+    assert h.called("LoadCases.GetNameList") == []
     assert h.called("Results.FrameForce") == [("F1", int(ItemTypeElm.OBJECT_ELM))]
 
 
 def test_frame_handle_forces_without_selected_output_has_actionable_error(make_model) -> None:
-    h = make_model({**_selected_output_responses(selected=False)})
+    h = make_model({**_selected_output_responses(selected=False), "Results.FrameForce": 1})
     with pytest.raises(SapApiError, match="select_output") as info:
         h.model.frames.ref("F1").forces()
     assert info.value.api_name == "Results.FrameForce"
     assert info.value.args_passed == ("F1", int(ItemTypeElm.OBJECT_ELM))
-    assert h.called("Results.FrameForce") == []
+    assert h.called("Results.FrameForce") == [("F1", int(ItemTypeElm.OBJECT_ELM))]
+    assert h.called("LoadCases.GetNameList") == [()]
+
+
+def test_frame_handle_forces_keeps_original_error_when_output_is_selected(make_model) -> None:
+    h = make_model({**_selected_output_responses(), "Results.FrameForce": 7})
+    with pytest.raises(SapApiError, match="status 7") as info:
+        h.model.frames.ref("F1").forces()
+    assert info.value.hint == ""
+    assert h.called("Results.FrameForce") == [("F1", int(ItemTypeElm.OBJECT_ELM))]
+    assert h.called("LoadCases.GetNameList") == [()]
 
 
 def test_result_batch_group_is_lazy_and_does_not_select_when_cases_omitted(make_model) -> None:
@@ -416,6 +427,28 @@ def test_result_batch_frames_temporary_group_is_explicit_opt_in(make_model) -> N
     assert h.called("GroupDef.Delete") == [(group_name,)]
 
 
+def test_result_batch_temporary_group_is_deleted_when_read_fails(make_model) -> None:
+    h = make_model(
+        {
+            **_selected_output_responses(selected=False),
+            "GroupDef.SetGroup": 0,
+            "FrameObj.SetGroupAssign": 0,
+            "GroupDef.Delete": 0,
+            "Results.FrameForce": 1,
+        }
+    )
+
+    with pytest.raises(SapApiError, match="select_output"):
+        (
+            h.model.results.batch()
+            .frame_forces(frames=["F1", "F2"], key="forces", strategy="temporary_group")
+            .collect()
+        )
+
+    (group_name,) = h.called("GroupDef.SetGroup")[0]
+    assert h.called("GroupDef.Delete") == [(group_name,)]
+
+
 def test_result_batch_points_default_to_object_reads_without_temp_group(make_model) -> None:
     h = make_model(
         {
@@ -486,3 +519,12 @@ def test_group_add_and_frame_assignment(make_model) -> None:
     h.model.frames.ref("F1").group(g)
     assert h.called("GroupDef.SetGroup") == [("piers",)]
     assert h.called("FrameObj.SetGroupAssign") == [("F1", "piers", False, 0)]
+
+
+def test_point_group_assignment(make_model) -> None:
+    h = make_model({"GroupDef.SetGroup": 0, "PointObj.SetGroupAssign": 0})
+    g = h.model.groups.add("supports")
+    p = h.model.points.ref("P1")
+    assert p.group(g) is p
+    assert h.called("GroupDef.SetGroup") == [("supports",)]
+    assert h.called("PointObj.SetGroupAssign") == [("P1", "supports", False, 0)]

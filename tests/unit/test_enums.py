@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sap2000py.enums import DOF, ItemType, Units, dof_mask, to_dof_mask
+from sap2000py.enums import DOF, DofSpec, ItemType, Units, dof_mask, to_dof_mask
 
 
 def test_units_values_match_oapi_ids() -> None:
@@ -26,6 +26,11 @@ def test_dof_mask_rejects_unknown() -> None:
         dof_mask(["U7"])
 
 
+def test_dof_mask_rejects_empty_name_sequence() -> None:
+    with pytest.raises(ValueError, match="DOF name sequence cannot be empty"):
+        dof_mask([])
+
+
 def test_to_dof_mask_accepts_name_sequence_bool_mask_and_none() -> None:
     assert to_dof_mask("R2") == [False, False, False, False, True, False]
     assert to_dof_mask(["U1", "R3"]) == [True, False, False, False, False, True]
@@ -44,6 +49,16 @@ def test_to_dof_mask_accepts_name_sequence_bool_mask_and_none() -> None:
 def test_to_dof_mask_rejects_short_bool_mask() -> None:
     with pytest.raises(ValueError, match="6 elements"):
         to_dof_mask([True])
+
+
+def test_to_dof_mask_rejects_empty_sequence_even_with_default() -> None:
+    with pytest.raises(ValueError, match="DOF name sequence cannot be empty"):
+        to_dof_mask([], default=True)
+
+
+def test_dof_spec_alias_accepts_supported_forms() -> None:
+    specs: list[DofSpec] = ["U1", ["U1"], [True, False, False, False, False, False], None]
+    assert len(specs) == 4
 
 
 def test_dof_constructors() -> None:

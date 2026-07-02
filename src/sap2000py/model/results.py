@@ -14,7 +14,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from .._optional import require
-from ..enums import ItemType, ItemTypeElm
+from ..enums import ItemTypeElm
 from ..errors import SapApiError
 from ..handles import Handle
 from ._base import Manager
@@ -26,6 +26,23 @@ _NO_OUTPUT_SELECTED_HINT = (
     "No SAP2000 output cases or combinations are selected. "
     "Call m.results.select_output(cases=[...], combos=[...]) before reading results."
 )
+
+_ResultStrategy = Literal["objects", "temporary_group"]
+_ObjectRequestKind = Literal["frame_forces", "joint_reactions", "joint_displacements"]
+_TempGroupRequestKind = Literal[
+    "frame_forces_temp_group",
+    "joint_reactions_temp_group",
+    "joint_displacements_temp_group",
+]
+_RequestKind = Literal[
+    "frame_forces",
+    "frame_forces_temp_group",
+    "joint_reactions",
+    "joint_reactions_temp_group",
+    "joint_displacements",
+    "joint_displacements_temp_group",
+    "modal_periods",
+]
 
 
 @dataclass(frozen=True)
@@ -90,15 +107,7 @@ class _Target:
 
 @dataclass(frozen=True)
 class _Request:
-    kind: Literal[
-        "frame_forces",
-        "frame_forces_temp_group",
-        "joint_reactions",
-        "joint_reactions_temp_group",
-        "joint_displacements",
-        "joint_displacements_temp_group",
-        "modal_periods",
-    ]
+    kind: _RequestKind
     key: str
     targets: tuple[_Target, ...] = ()
 
@@ -125,21 +134,54 @@ class ResultBatch:
     def _single_target(
         self,
         *,
-        frame: FrameHandle | str | None = None,
-        point: PointHandle | str | None = None,
+        single: Any | None = None,
+        manager: Any,
         group: GroupHandle | str | None = None,
         selection: bool = False,
     ) -> _Target:
-        chosen = sum(value is not None for value in (frame, point, group)) + int(selection)
+        chosen = sum(value is not None for value in (single, group)) + int(selection)
         if chosen != 1:
             raise ValueError("provide exactly one result target.")
-        if frame is not None:
-            return _Target(self._results._model.frames.ref(frame).name, ItemTypeElm.OBJECT_ELM)
-        if point is not None:
-            return _Target(self._results._model.points.ref(point).name, ItemTypeElm.OBJECT_ELM)
+        if single is not None:
+            return _Target(manager.ref(single).name, ItemTypeElm.OBJECT_ELM)
         if group is not None:
             return _Target(self._results._model.groups.ref(group).name, ItemTypeElm.GROUP_ELM)
         return _Target("", ItemTypeElm.SELECTION_ELM)
+
+    def _register_targets(
+        self,
+        *,
+        kind: _ObjectRequestKind,
+        temp_group_kind: _TempGroupRequestKind,
+        single: Any | None,
+        many: Sequence[Any] | None,
+        many_label: str,
+        manager: Any,
+        group: GroupHandle | str | None,
+        selection: bool,
+        key: str | None,
+        strategy: _ResultStrategy,
+    ) -> ResultBatch:
+        self._validate_strategy(strategy)
+        if many is not None:
+            if single is not None or group is not None or selection:
+                raise ValueError(f"{many_label}= cannot be combined with another result target.")
+            targets = tuple(
+                _Target(manager.ref(item).name, ItemTypeElm.OBJECT_ELM) for item in many
+            )
+            request_kind: _RequestKind = kind if strategy == "objects" else temp_group_kind
+        else:
+            targets = (
+                self._single_target(
+                    single=single,
+                    manager=manager,
+                    group=group,
+                    selection=selection,
+                ),
+            )
+            request_kind = kind
+        self._requests.append(_Request(request_kind, self._key(key, kind), targets))
+        return self
 
     def frame_forces(
         self,
@@ -152,22 +194,18 @@ class ResultBatch:
         strategy: Literal["objects", "temporary_group"] = "objects",
     ) -> ResultBatch:
         """Register frame force extraction."""
-        self._validate_strategy(strategy)
-        if frames is not None:
-            if frame is not None or group is not None or selection:
-                raise ValueError("frames= cannot be combined with another result target.")
-            targets = tuple(
-                _Target(self._results._model.frames.ref(item).name, ItemTypeElm.OBJECT_ELM)
-                for item in frames
-            )
-            request_kind: Literal["frame_forces", "frame_forces_temp_group"] = (
-                "frame_forces" if strategy == "objects" else "frame_forces_temp_group"
-            )
-        else:
-            targets = (self._single_target(frame=frame, group=group, selection=selection),)
-            request_kind = "frame_forces"
-        self._requests.append(_Request(request_kind, self._key(key, "frame_forces"), targets))
-        return self
+        return self._register_targets(
+            kind="frame_forces",
+            temp_group_kind="frame_forces_temp_group",
+            single=frame,
+            many=frames,
+            many_label="frames",
+            manager=self._results._model.frames,
+            group=group,
+            selection=selection,
+            key=key,
+            strategy=strategy,
+        )
 
     def joint_reactions(
         self,
@@ -180,24 +218,18 @@ class ResultBatch:
         strategy: Literal["objects", "temporary_group"] = "objects",
     ) -> ResultBatch:
         """Register joint reaction extraction."""
-        self._validate_strategy(strategy)
-        if points is not None:
-            if point is not None or group is not None or selection:
-                raise ValueError("points= cannot be combined with another result target.")
-            targets = tuple(
-                _Target(self._results._model.points.ref(item).name, ItemTypeElm.OBJECT_ELM)
-                for item in points
-            )
-            request_kind: Literal["joint_reactions", "joint_reactions_temp_group"] = (
-                "joint_reactions" if strategy == "objects" else "joint_reactions_temp_group"
-            )
-        else:
-            targets = (self._single_target(point=point, group=group, selection=selection),)
-            request_kind = "joint_reactions"
-        self._requests.append(
-            _Request(request_kind, self._key(key, "joint_reactions"), targets)
+        return self._register_targets(
+            kind="joint_reactions",
+            temp_group_kind="joint_reactions_temp_group",
+            single=point,
+            many=points,
+            many_label="points",
+            manager=self._results._model.points,
+            group=group,
+            selection=selection,
+            key=key,
+            strategy=strategy,
         )
-        return self
 
     def joint_displacements(
         self,
@@ -210,26 +242,18 @@ class ResultBatch:
         strategy: Literal["objects", "temporary_group"] = "objects",
     ) -> ResultBatch:
         """Register joint displacement extraction."""
-        self._validate_strategy(strategy)
-        if points is not None:
-            if point is not None or group is not None or selection:
-                raise ValueError("points= cannot be combined with another result target.")
-            targets = tuple(
-                _Target(self._results._model.points.ref(item).name, ItemTypeElm.OBJECT_ELM)
-                for item in points
-            )
-            request_kind: Literal["joint_displacements", "joint_displacements_temp_group"] = (
-                "joint_displacements"
-                if strategy == "objects"
-                else "joint_displacements_temp_group"
-            )
-        else:
-            targets = (self._single_target(point=point, group=group, selection=selection),)
-            request_kind = "joint_displacements"
-        self._requests.append(
-            _Request(request_kind, self._key(key, "joint_displacements"), targets)
+        return self._register_targets(
+            kind="joint_displacements",
+            temp_group_kind="joint_displacements_temp_group",
+            single=point,
+            many=points,
+            many_label="points",
+            manager=self._results._model.points,
+            group=group,
+            selection=selection,
+            key=key,
+            strategy=strategy,
         )
-        return self
 
     def modal_periods(self, *, key: str | None = None) -> ResultBatch:
         """Register modal period extraction."""
@@ -273,31 +297,15 @@ class ResultBatch:
 
     def _collect_frame_temp_group(self, targets: Sequence[_Target]) -> ResultTable:
         group_name = f"__sap2000py_results_{uuid4().hex}"
-        created = False
+        group: GroupHandle | None = None
         try:
-            self._results._g.call(
-                self._results._raw.GroupDef.SetGroup,
-                group_name,
-                api_name="GroupDef.SetGroup",
-            )
-            created = True
+            group = self._results._model.groups.add(group_name)
             for target in targets:
-                self._results._g.call(
-                    self._results._raw.FrameObj.SetGroupAssign,
-                    target.name,
-                    group_name,
-                    False,
-                    int(ItemType.OBJECT),
-                    api_name="FrameObj.SetGroupAssign",
-                )
+                self._results._model.frames.ref(target.name).group(group)
             return self._results._frame_forces(group_name, ItemTypeElm.GROUP_ELM)
         finally:
-            if created:
-                self._results._g.call(
-                    self._results._raw.GroupDef.Delete,
-                    group_name,
-                    api_name="GroupDef.Delete",
-                )
+            if group is not None:
+                group.delete()
 
     def _collect_point_temp_group(
         self,
@@ -306,33 +314,17 @@ class ResultBatch:
         kind: Literal["joint_reactions", "joint_displacements"],
     ) -> ResultTable:
         group_name = f"__sap2000py_results_{uuid4().hex}"
-        created = False
+        group: GroupHandle | None = None
         try:
-            self._results._g.call(
-                self._results._raw.GroupDef.SetGroup,
-                group_name,
-                api_name="GroupDef.SetGroup",
-            )
-            created = True
+            group = self._results._model.groups.add(group_name)
             for target in targets:
-                self._results._g.call(
-                    self._results._raw.PointObj.SetGroupAssign,
-                    target.name,
-                    group_name,
-                    False,
-                    int(ItemType.OBJECT),
-                    api_name="PointObj.SetGroupAssign",
-                )
+                self._results._model.points.ref(target.name).group(group)
             if kind == "joint_reactions":
                 return self._results._joint_reactions(group_name, ItemTypeElm.GROUP_ELM)
             return self._results._joint_displacements(group_name, ItemTypeElm.GROUP_ELM)
         finally:
-            if created:
-                self._results._g.call(
-                    self._results._raw.GroupDef.Delete,
-                    group_name,
-                    api_name="GroupDef.Delete",
-                )
+            if group is not None:
+                group.delete()
 
 
 class Results(Manager[Handle]):
@@ -402,10 +394,15 @@ class Results(Manager[Handle]):
 
         return False
 
-    def _ensure_output_selected(self, api_name: str, args: tuple[Any, ...]) -> None:
-        if self._has_selected_output():
-            return
-        raise SapApiError(api_name, args, 1, hint=_NO_OUTPUT_SELECTED_HINT)
+    def _call_result_with_output_hint(
+        self, com_func: Any, api_name: str, args: tuple[Any, ...]
+    ) -> Any:
+        try:
+            return self._g.call(com_func, *args, api_name=api_name)
+        except SapApiError as exc:
+            if self._has_selected_output():
+                raise
+            raise SapApiError(api_name, args, exc.code, hint=_NO_OUTPUT_SELECTED_HINT) from exc
 
     def batch(
         self,
@@ -434,12 +431,12 @@ class Results(Manager[Handle]):
 
     def _joint_reactions(self, name: str, item_type: ItemTypeElm) -> ResultTable:
         args = (name, int(item_type))
-        self._ensure_output_selected("Results.JointReact", args)
-        (_n, obj, _elm, case, _st, step, f1, f2, f3, m1, m2, m3) = self._g.call(
+        result = self._call_result_with_output_hint(
             self._raw.Results.JointReact,
-            *args,
-            api_name="Results.JointReact",
+            "Results.JointReact",
+            args,
         )
+        (_n, obj, _elm, case, _st, step, f1, f2, f3, m1, m2, m3) = result
         return ResultTable(
             _columns(
                 ["joint", "case", "step", "F1", "F2", "F3", "M1", "M2", "M3"],
@@ -454,12 +451,12 @@ class Results(Manager[Handle]):
 
     def _joint_displacements(self, name: str, item_type: ItemTypeElm) -> ResultTable:
         args = (name, int(item_type))
-        self._ensure_output_selected("Results.JointDispl", args)
-        (_n, obj, _elm, case, _st, step, u1, u2, u3, r1, r2, r3) = self._g.call(
+        result = self._call_result_with_output_hint(
             self._raw.Results.JointDispl,
-            *args,
-            api_name="Results.JointDispl",
+            "Results.JointDispl",
+            args,
         )
+        (_n, obj, _elm, case, _st, step, u1, u2, u3, r1, r2, r3) = result
         return ResultTable(
             _columns(
                 ["joint", "case", "step", "U1", "U2", "U3", "R1", "R2", "R3"],
@@ -474,12 +471,12 @@ class Results(Manager[Handle]):
 
     def _frame_forces(self, name: str, item_type: ItemTypeElm) -> ResultTable:
         args = (name, int(item_type))
-        self._ensure_output_selected("Results.FrameForce", args)
-        (_n, obj, obj_sta, _elm, _elm_sta, case, _st, step, p, v2, v3, t, m2, m3) = self._g.call(
+        result = self._call_result_with_output_hint(
             self._raw.Results.FrameForce,
-            *args,
-            api_name="Results.FrameForce",
+            "Results.FrameForce",
+            args,
         )
+        (_n, obj, obj_sta, _elm, _elm_sta, case, _st, step, p, v2, v3, t, m2, m3) = result
         return ResultTable(
             _columns(
                 ["frame", "station", "case", "step", "P", "V2", "V3", "T", "M2", "M3"],

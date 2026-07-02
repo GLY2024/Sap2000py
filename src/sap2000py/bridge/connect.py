@@ -7,11 +7,10 @@ boilerplate at every cap/pier/bearing interface.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from ..enums import to_dof_mask
+from ..enums import DofSpec, to_dof_mask
 from ..model.points import PointHandle
 
 if TYPE_CHECKING:
@@ -21,7 +20,6 @@ if TYPE_CHECKING:
 #: ``fixed`` (so SAP ignores the value), but a large number keeps the property
 #: well-defined if a caller un-fixes a DOF.
 _RIGID_STIFFNESS = 1.0e12
-DofSpec = str | Sequence[str] | Sequence[bool] | None
 
 
 class Connection(str, Enum):

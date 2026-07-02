@@ -140,6 +140,13 @@ def test_point_handle_restrain_no_args_raises(make_model) -> None:
     assert h.called("PointObj.SetRestraint") == []
 
 
+def test_point_handle_restrain_explicit_none_raises(make_model) -> None:
+    h = make_model({"PointObj.SetRestraint": 0})
+    with pytest.raises(ValueError, match="at least one DOF"):
+        h.model.points.ref("P1").restrain(None)
+    assert h.called("PointObj.SetRestraint") == []
+
+
 def test_point_handle_fix_pin_free(make_model) -> None:
     h = make_model({"PointObj.SetRestraint": 0})
     p = h.model.points.ref("P1")
