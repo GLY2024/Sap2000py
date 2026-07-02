@@ -21,7 +21,7 @@ class GroupHandle(Handle):
         owner._g.call(owner._raw.GroupDef.Delete, self.name, api_name="GroupDef.Delete")
 
 
-class Groups(Manager):
+class Groups(Manager[GroupHandle]):
     """Define and query groups. Wraps ``cGroup``.
 
     Assigning objects to a group is done from live handles, e.g.
@@ -31,13 +31,10 @@ class Groups(Manager):
     _handle_cls = GroupHandle
     _kind = "group"
 
-    def _handle(self, name: str) -> GroupHandle:
-        return GroupHandle(name, _owner=self)
-
     def add(self, name: str) -> GroupHandle:
         """Create (or redefine) a group. Wraps ``GroupDef.SetGroup``."""
         self._g.call(self._raw.GroupDef.SetGroup, name, api_name="GroupDef.SetGroup")
-        return GroupHandle(name, _owner=self)
+        return self._handle(name)
 
     def names(self) -> list[str]:
         """All group names. Wraps ``GroupDef.GetNameList``."""

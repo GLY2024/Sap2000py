@@ -36,14 +36,11 @@ class FrameSectionHandle(Handle):
         owner._g.call(owner._raw.PropFrame.Delete, self.name, api_name="PropFrame.Delete")
 
 
-class FrameSections(Manager):
+class FrameSections(Manager[FrameSectionHandle]):
     """Define and query frame section properties. Wraps ``cPropFrame``."""
 
     _handle_cls = FrameSectionHandle
     _kind = "frame section"
-
-    def _handle(self, name: str) -> FrameSectionHandle:
-        return FrameSectionHandle(name, _owner=self)
 
     def add_rectangle(
         self,

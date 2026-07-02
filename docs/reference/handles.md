@@ -12,6 +12,11 @@ same_point = m.points.ref("P1")
 checked = m.points["P1"]        # validates by GetNameList
 ```
 
+Handle equality compares only the handle type and `name`; `_owner` is not part
+of equality. Same-named handles from different `SapClient` or model instances
+therefore compare equal, but each manager's `ref()` rejects handles already
+bound to another manager/model unless you pass `.name` explicitly.
+
 Top-level imports such as `from sap2000py import PointHandle` are supported for
 typing. `sap2000py.handles` contains only the base class, `as_name()`, and
 unwrapped name handles for nouns that do not yet have managers.

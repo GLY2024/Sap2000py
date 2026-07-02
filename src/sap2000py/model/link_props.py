@@ -31,14 +31,11 @@ class LinkPropHandle(Handle):
         owner._g.call(owner._raw.PropLink.Delete, self.name, api_name="PropLink.Delete")
 
 
-class LinkProps(Manager):
+class LinkProps(Manager[LinkPropHandle]):
     """Define link properties. Wraps ``cPropLink``."""
 
     _handle_cls = LinkPropHandle
     _kind = "link property"
-
-    def _handle(self, name: str) -> LinkPropHandle:
-        return LinkPropHandle(name, _owner=self)
 
     def add_linear(
         self,

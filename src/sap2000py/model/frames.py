@@ -149,14 +149,11 @@ class FrameHandle(Handle):
         )
 
 
-class Frames(Manager):
+class Frames(Manager[FrameHandle]):
     """Create and manipulate frame objects. Wraps ``cFrameObj``."""
 
     _handle_cls = FrameHandle
     _kind = "frame"
-
-    def _handle(self, name: str) -> FrameHandle:
-        return FrameHandle(name, _owner=self)
 
     def add_by_points(
         self,

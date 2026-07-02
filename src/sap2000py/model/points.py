@@ -129,14 +129,11 @@ class PointHandle(Handle):
         )
 
 
-class Points(Manager):
+class Points(Manager[PointHandle]):
     """Create and manipulate point objects. Wraps ``cPointObj``."""
 
     _handle_cls = PointHandle
     _kind = "point"
-
-    def _handle(self, name: str) -> PointHandle:
-        return PointHandle(name, _owner=self)
 
     def add(
         self,

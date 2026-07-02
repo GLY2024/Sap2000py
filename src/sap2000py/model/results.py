@@ -15,10 +15,17 @@ from uuid import uuid4
 
 from .._optional import require
 from ..enums import ItemType, ItemTypeElm
+from ..errors import SapApiError
+from ..handles import Handle
 from ._base import Manager
 from .frames import FrameHandle
 from .groups import GroupHandle
 from .points import PointHandle
+
+_NO_OUTPUT_SELECTED_HINT = (
+    "No SAP2000 output cases or combinations are selected. "
+    "Call m.results.select_output(cases=[...], combos=[...]) before reading results."
+)
 
 
 @dataclass(frozen=True)
@@ -328,7 +335,7 @@ class ResultBatch:
                 )
 
 
-class Results(Manager):
+class Results(Manager[Handle]):
     """Select output and extract analysis results. Wraps ``cAnalysisResults``."""
 
     # -- output selection ---------------------------------------------------
@@ -366,6 +373,40 @@ class Results(Manager):
 
     # -- extraction ---------------------------------------------------------
 
+    def _has_selected_output(self) -> bool:
+        _case_count, case_names = self._g.call(
+            self._raw.LoadCases.GetNameList, api_name="LoadCases.GetNameList"
+        )
+        for case in case_names or ():
+            selected = self._g.call(
+                self._raw.Results.Setup.GetCaseSelectedForOutput,
+                case,
+                False,
+                api_name="Results.Setup.GetCaseSelectedForOutput",
+            )
+            if bool(selected):
+                return True
+
+        _combo_count, combo_names = self._g.call(
+            self._raw.RespCombo.GetNameList, api_name="RespCombo.GetNameList"
+        )
+        for combo in combo_names or ():
+            selected = self._g.call(
+                self._raw.Results.Setup.GetComboSelectedForOutput,
+                combo,
+                False,
+                api_name="Results.Setup.GetComboSelectedForOutput",
+            )
+            if bool(selected):
+                return True
+
+        return False
+
+    def _ensure_output_selected(self, api_name: str, args: tuple[Any, ...]) -> None:
+        if self._has_selected_output():
+            return
+        raise SapApiError(api_name, args, 1, hint=_NO_OUTPUT_SELECTED_HINT)
+
     def batch(
         self,
         *,
@@ -392,10 +433,11 @@ class Results(Manager):
         )
 
     def _joint_reactions(self, name: str, item_type: ItemTypeElm) -> ResultTable:
+        args = (name, int(item_type))
+        self._ensure_output_selected("Results.JointReact", args)
         (_n, obj, _elm, case, _st, step, f1, f2, f3, m1, m2, m3) = self._g.call(
             self._raw.Results.JointReact,
-            name,
-            int(item_type),
+            *args,
             api_name="Results.JointReact",
         )
         return ResultTable(
@@ -411,10 +453,11 @@ class Results(Manager):
         return self._joint_reactions(point_ref.name, ItemTypeElm.OBJECT_ELM)
 
     def _joint_displacements(self, name: str, item_type: ItemTypeElm) -> ResultTable:
+        args = (name, int(item_type))
+        self._ensure_output_selected("Results.JointDispl", args)
         (_n, obj, _elm, case, _st, step, u1, u2, u3, r1, r2, r3) = self._g.call(
             self._raw.Results.JointDispl,
-            name,
-            int(item_type),
+            *args,
             api_name="Results.JointDispl",
         )
         return ResultTable(
@@ -430,10 +473,11 @@ class Results(Manager):
         return self._joint_displacements(point_ref.name, ItemTypeElm.OBJECT_ELM)
 
     def _frame_forces(self, name: str, item_type: ItemTypeElm) -> ResultTable:
+        args = (name, int(item_type))
+        self._ensure_output_selected("Results.FrameForce", args)
         (_n, obj, obj_sta, _elm, _elm_sta, case, _st, step, p, v2, v3, t, m2, m3) = self._g.call(
             self._raw.Results.FrameForce,
-            name,
-            int(item_type),
+            *args,
             api_name="Results.FrameForce",
         )
         return ResultTable(

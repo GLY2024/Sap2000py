@@ -23,14 +23,11 @@ class LinkHandle(Handle):
         owner._g.call(owner._raw.LinkObj.Delete, self.name, api_name="LinkObj.Delete")
 
 
-class Links(Manager):
+class Links(Manager[LinkHandle]):
     """Create and query link objects. Wraps ``cLinkObj``."""
 
     _handle_cls = LinkHandle
     _kind = "link"
-
-    def _handle(self, name: str) -> LinkHandle:
-        return LinkHandle(name, _owner=self)
 
     def add_by_points(
         self,

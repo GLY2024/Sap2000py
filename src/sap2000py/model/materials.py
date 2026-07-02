@@ -51,14 +51,11 @@ class MaterialHandle(Handle):
         owner._g.call(owner._raw.PropMaterial.Delete, self.name, api_name="PropMaterial.Delete")
 
 
-class Materials(Manager):
+class Materials(Manager[MaterialHandle]):
     """Define and query material properties. Wraps ``cPropMaterial``."""
 
     _handle_cls = MaterialHandle
     _kind = "material"
-
-    def _handle(self, name: str) -> MaterialHandle:
-        return MaterialHandle(name, _owner=self)
 
     def add(
         self,

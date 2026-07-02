@@ -6,7 +6,7 @@ import pytest
 
 from sap2000py import FrameHandle, FrameSectionHandle, MaterialHandle, PointHandle
 from sap2000py.enums import ItemTypeElm, LoadPatternType, MatType
-from sap2000py.errors import SapAnalysisError, SapError
+from sap2000py.errors import SapAnalysisError, SapApiError, SapError
 from sap2000py.model.results import ResultTable
 
 # -- materials --------------------------------------------------------------
@@ -280,6 +280,14 @@ def _joint_displ_result(point: str = "P1"):
     )
 
 
+def _selected_output_responses(selected: bool = True) -> dict[str, object]:
+    return {
+        "LoadCases.GetNameList": (1, ("DEAD",), 0),
+        "Results.Setup.GetCaseSelectedForOutput": (selected, 0),
+        "RespCombo.GetNameList": (0, (), 0),
+    }
+
+
 def test_frame_forces_rejects_foreign_frame_handle(make_model) -> None:
     h1 = make_model({"Results.FrameForce": _frame_force_result()})
     h2 = make_model()
@@ -290,15 +298,26 @@ def test_frame_forces_rejects_foreign_frame_handle(make_model) -> None:
 
 
 def test_frame_handle_forces_does_not_select_output(make_model) -> None:
-    h = make_model({"Results.FrameForce": _frame_force_result()})
+    h = make_model({**_selected_output_responses(), "Results.FrameForce": _frame_force_result()})
     table = h.model.frames.ref("F1").forces()
     assert table["P"] == (1.0,)
     assert h.called("Results.Setup.DeselectAllCasesAndCombosForOutput") == []
     assert h.called("Results.FrameForce") == [("F1", int(ItemTypeElm.OBJECT_ELM))]
 
 
+def test_frame_handle_forces_without_selected_output_has_actionable_error(make_model) -> None:
+    h = make_model({**_selected_output_responses(selected=False)})
+    with pytest.raises(SapApiError, match="select_output") as info:
+        h.model.frames.ref("F1").forces()
+    assert info.value.api_name == "Results.FrameForce"
+    assert info.value.args_passed == ("F1", int(ItemTypeElm.OBJECT_ELM))
+    assert h.called("Results.FrameForce") == []
+
+
 def test_result_batch_group_is_lazy_and_does_not_select_when_cases_omitted(make_model) -> None:
-    h = make_model({"Results.FrameForce": _frame_force_result("G1")})
+    h = make_model(
+        {**_selected_output_responses(), "Results.FrameForce": _frame_force_result("G1")}
+    )
     plan = h.model.results.batch().frame_forces(group="G1", key="forces")
     assert h.calls == []
 
@@ -312,6 +331,7 @@ def test_result_batch_group_is_lazy_and_does_not_select_when_cases_omitted(make_
 def test_result_batch_selects_output_once_when_cases_are_given(make_model) -> None:
     h = make_model(
         {
+            **_selected_output_responses(),
             "Results.Setup.DeselectAllCasesAndCombosForOutput": 0,
             "Results.Setup.SetCaseSelectedForOutput": 0,
             "Results.FrameForce": _frame_force_result("G1"),
@@ -333,14 +353,21 @@ def test_result_batch_selects_output_once_when_cases_are_given(make_model) -> No
 
 
 def test_result_batch_selection_reads_current_sap_selection_without_mutating_it(make_model) -> None:
-    h = make_model({"Results.FrameForce": _frame_force_result("F1")})
+    h = make_model(
+        {**_selected_output_responses(), "Results.FrameForce": _frame_force_result("F1")}
+    )
     h.model.results.batch().frame_forces(selection=True, key="selected").collect()
     assert h.called("Results.Setup.DeselectAllCasesAndCombosForOutput") == []
     assert h.called("Results.FrameForce") == [("", int(ItemTypeElm.SELECTION_ELM))]
 
 
 def test_result_batch_frames_default_to_object_reads_without_temp_group(make_model) -> None:
-    h = make_model({"Results.FrameForce": lambda name, _item_type: _frame_force_result(name)})
+    h = make_model(
+        {
+            **_selected_output_responses(),
+            "Results.FrameForce": lambda name, _item_type: _frame_force_result(name),
+        }
+    )
     tables = h.model.results.batch().frame_forces(frames=["F1", "F2"], key="forces").collect()
 
     assert tables["forces"]["frame"] == ("F1", "F2")
@@ -364,6 +391,7 @@ def test_result_batch_rejects_unknown_strategy(make_model) -> None:
 def test_result_batch_frames_temporary_group_is_explicit_opt_in(make_model) -> None:
     h = make_model(
         {
+            **_selected_output_responses(),
             "GroupDef.SetGroup": 0,
             "FrameObj.SetGroupAssign": 0,
             "GroupDef.Delete": 0,
@@ -389,7 +417,12 @@ def test_result_batch_frames_temporary_group_is_explicit_opt_in(make_model) -> N
 
 
 def test_result_batch_points_default_to_object_reads_without_temp_group(make_model) -> None:
-    h = make_model({"Results.JointReact": lambda name, _item_type: _joint_react_result(name)})
+    h = make_model(
+        {
+            **_selected_output_responses(),
+            "Results.JointReact": lambda name, _item_type: _joint_react_result(name),
+        }
+    )
 
     tables = h.model.results.batch().joint_reactions(points=["P1", "P2"], key="reactions").collect()
 
@@ -405,6 +438,7 @@ def test_result_batch_points_default_to_object_reads_without_temp_group(make_mod
 def test_result_batch_points_temporary_group_is_explicit_opt_in(make_model) -> None:
     h = make_model(
         {
+            **_selected_output_responses(),
             "GroupDef.SetGroup": 0,
             "PointObj.SetGroupAssign": 0,
             "GroupDef.Delete": 0,
