@@ -108,9 +108,15 @@ def _discover(candidates: list[Installation] | tuple[Installation, ...]) -> list
         if existing_key is None or (candidate_key is not None and candidate_key > existing_key):
             best_by_path[path] = candidate
 
+    version_width = max(
+        (len(key) for item in best_by_path.values() if (key := _version_key(item.version))),
+        default=0,
+    )
+
     def sort_key(item: Installation) -> tuple[int, tuple[int, ...], str]:
         key = _version_key(item.version)
-        return (0 if key is not None else 1, tuple(-part for part in (key or ())), str(item.path))
+        padded = (key or ()) + (0,) * (version_width - len(key or ()))
+        return (0 if key is not None else 1, tuple(-part for part in padded), str(item.path))
 
     return sorted(best_by_path.values(), key=sort_key)
 
@@ -136,7 +142,7 @@ _REGISTRY_VERSION_VALUE_NAMES = frozenset(
 def _exe_from_registry_value(value: str) -> Path | None:
     path = Path(value)
     if path.name.lower() == "sap2000.exe":
-        return path
+        return path if path.exists() else None
     candidate = path / "SAP2000.exe"
     return candidate if candidate.exists() else None
 

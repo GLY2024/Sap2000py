@@ -211,6 +211,32 @@ def test_attach_or_launch_reuses_matching_running_version(
     assert launch_calls == []
 
 
+def test_attach_or_launch_rejects_version_and_program_path_before_attach(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attached = SapClient(FakeSapObject([0], version="25.0.0"), owns_process=False)
+    attach_calls = 0
+    launch_calls: list[dict[str, object]] = []
+
+    def fake_attach(cls, *, policy):
+        nonlocal attach_calls
+        attach_calls += 1
+        return attached
+
+    def fake_launch(cls, **kwargs):
+        launch_calls.append(kwargs)
+        return attached
+
+    monkeypatch.setattr(SapClient, "attach", classmethod(fake_attach))
+    monkeypatch.setattr(SapClient, "launch", classmethod(fake_launch))
+
+    with pytest.raises(ValueError, match="version and program_path"):
+        SapClient.attach_or_launch(version="25", program_path="C:/SAP2000.exe")
+
+    assert attach_calls == 0
+    assert launch_calls == []
+
+
 def test_attach_or_launch_discards_mismatched_running_version(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

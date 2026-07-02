@@ -53,7 +53,7 @@ Object creators return a live handle: a typed reference to an object in SAP2000
 by name. It stores no model state, and each method round-trips to SAP2000:
 
 ```python
-p = m.points.add(1, 2, 3)     # PointHandle("P1")
+p = m.points.add(1, 2, 3)     # handle.name is assigned by SAP2000
 p.pin()                       # fix() / pin() / free() for the common supports
 m.points.ref("P1").pin()      # bind a raw name to this model
 p.restrain("U1", "R3")        # or name exactly which DOF to restrain

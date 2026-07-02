@@ -53,6 +53,9 @@ into sub-managers, each documented below.
 
 ## Constraints
 
+When `add_body()` or `add_equal()` omit `dof=`, they couple all six degrees of
+freedom: `[U1, U2, U3, R1, R2, R3]`.
+
 ::: sap2000py.model.constraints.Constraints
     options:
       show_root_heading: true

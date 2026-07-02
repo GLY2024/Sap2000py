@@ -8,6 +8,7 @@ _FRAME_OUTPUT_STATIONS_ARITY: dict[int, int] = {
     # Verified against SAP2000 25 CSI_OAPI_Documentation.chm / SAP2000v1.tlb.
     25: 6,
 }
+_SUPPORTED_FRAME_OUTPUT_STATIONS_ARITIES = frozenset({6})
 
 
 def frame_output_stations_args(
@@ -27,5 +28,10 @@ def frame_output_stations_args(
             "No compatibility entry for FrameObj.SetOutputStations "
             f"on SAP2000 major version {major}."
         )
+    if arity not in _SUPPORTED_FRAME_OUTPUT_STATIONS_ARITIES:
+        raise SapCompatibilityError(
+            "Unsupported FrameObj.SetOutputStations compatibility arity "
+            f"{arity} for SAP2000 major version {major}."
+        )
     args: tuple[object, ...] = (my_type, max_seg, min_sec, no_ends, no_ptloads, item_type)
-    return args if arity == 6 else args[:-1]
+    return args

@@ -7,7 +7,8 @@ rewrite, and it deliberately fixes the two structural problems of the old bridge
 code: 72 hidden `Saproject()` singleton calls, and engineering parameters
 hard-coded inline.
 
-The components themselves are pure Python and need no extra; only YAML configs
+The components themselves are pure Python and need no extra; YAML configs and
+the shipped bearing preset helpers (`bearing_preset()` / `bearing_presets()`)
 require the `bridge` extra (`pip install 'sap2000py[bridge]'`).
 
 ## The component model

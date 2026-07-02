@@ -400,7 +400,13 @@ class Results(Manager[Handle]):
         try:
             return self._g.call(com_func, *args, api_name=api_name)
         except SapApiError as exc:
-            if self._has_selected_output():
+            try:
+                has_selected_output = self._has_selected_output()
+            except SapApiError:
+                has_selected_output = None
+            if has_selected_output is None:
+                raise
+            if has_selected_output:
                 raise
             raise SapApiError(api_name, args, exc.code, hint=_NO_OUTPUT_SELECTED_HINT) from exc
 

@@ -109,8 +109,8 @@ class FrameSections(Manager[FrameSectionHandle]):
 
         ``torsion`` is the torsional constant J; ``i22``/``i33`` the moments of
         inertia; ``as2``/``as3`` the shear areas. All in the current units.
-        Wraps ``PropFrame.SetGeneral`` (radii of gyration set to 1, modifiers
-        left default).
+        Wraps ``PropFrame.SetGeneral`` (S22, S33, Z22, Z33, R22, and R33 set to
+        1; modifiers left default).
         """
         self._g.call(
             self._raw.PropFrame.SetGeneral,

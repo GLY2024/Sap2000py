@@ -22,6 +22,13 @@ def test_add_concrete_builds_grade_string_and_renames(make_model) -> None:
     assert h.called("PropMaterial.ChangeName") == [("JTG-C40", "C40")]
 
 
+def test_add_concrete_tb_uses_legacy_sap_grade_string(make_model) -> None:
+    h = make_model({"PropMaterial.AddMaterial": ["TB-C30", 0], "PropMaterial.ChangeName": 0})
+    h.model.materials.add_concrete("C30", grade="C30", code="TB")
+    (add_args,) = h.called("PropMaterial.AddMaterial")
+    assert add_args == ("", int(MatType.CONCRETE), "China", "TB", "TB10002.3 C30")
+
+
 def test_add_steel_gb_grade_string(make_model) -> None:
     h = make_model({"PropMaterial.AddMaterial": ["GB-Q345", 0], "PropMaterial.ChangeName": 0})
     h.model.materials.add_steel("Q345", grade="Q345", code="GB")
@@ -321,6 +328,18 @@ def test_frame_handle_forces_keeps_original_error_when_output_is_selected(make_m
     with pytest.raises(SapApiError, match="status 7") as info:
         h.model.frames.ref("F1").forces()
     assert info.value.hint == ""
+    assert h.called("Results.FrameForce") == [("F1", int(ItemTypeElm.OBJECT_ELM))]
+    assert h.called("LoadCases.GetNameList") == [()]
+
+
+def test_frame_handle_forces_keeps_original_error_when_output_probe_fails(make_model) -> None:
+    h = make_model({"Results.FrameForce": 7, "LoadCases.GetNameList": 3})
+    with pytest.raises(SapApiError, match="status 7") as info:
+        h.model.frames.ref("F1").forces()
+
+    assert info.value.api_name == "Results.FrameForce"
+    assert info.value.hint == ""
+    assert "LoadCases.GetNameList" not in str(info.value)
     assert h.called("Results.FrameForce") == [("F1", int(ItemTypeElm.OBJECT_ELM))]
     assert h.called("LoadCases.GetNameList") == [()]
 

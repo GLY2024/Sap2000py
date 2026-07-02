@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+import sap2000py.model._compat as compat_module
 from sap2000py.errors import SapCompatibilityError
 from sap2000py.model._compat import frame_output_stations_args
 
@@ -27,6 +28,23 @@ def test_frame_output_stations_unverified_version_raises_compatibility_error(
     with pytest.raises(SapCompatibilityError, match=r"FrameObj\.SetOutputStations"):
         frame_output_stations_args(
             major,
+            my_type=2,
+            max_seg=0.0,
+            min_sec=5,
+            no_ends=False,
+            no_ptloads=False,
+            item_type=0,
+        )
+
+
+def test_frame_output_stations_unverified_arity_raises_compatibility_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(compat_module._FRAME_OUTPUT_STATIONS_ARITY, 24, 5)
+
+    with pytest.raises(SapCompatibilityError, match="Unsupported"):
+        frame_output_stations_args(
+            24,
             my_type=2,
             max_seg=0.0,
             min_sec=5,

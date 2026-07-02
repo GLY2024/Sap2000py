@@ -183,6 +183,9 @@ class SapClient:
     @classmethod
     def attach_or_launch(cls, *, version: str | None = None, **launch_kwargs: Any) -> SapClient:
         """Attach to a running instance, or launch a new one if none exists."""
+        if version is not None and launch_kwargs.get("program_path") is not None:
+            raise ValueError("version and program_path are mutually exclusive.")
+
         try:
             client = cls.attach(policy=launch_kwargs.get("policy", ErrorPolicy.RAISE))
         except SapConnectionError:

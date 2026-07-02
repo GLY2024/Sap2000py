@@ -19,7 +19,7 @@ from ._base import Manager
 _CONCRETE_GRADE = {
     "GB": "GB 50010 {g}",
     "JTG": "JTG D62-2004 {g}",
-    "TB": "TB 10092-2017 {g}",
+    "TB": "TB10002.3 {g}",
 }
 _STEEL_GRADE = {
     "GB": "{g}",  # e.g. "Q345"

@@ -89,10 +89,6 @@ class SapApiError(SapError):
         super().__init__(message)
 
 
-class SapModelLockedError(SapApiError):
-    """Raised when an operation is rejected because the model is locked."""
-
-
 class SapNameNotFoundError(SapError):
     """Raised when a client-side name validation cannot find an object."""
 
