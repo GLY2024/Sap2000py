@@ -13,7 +13,7 @@ from sap2000py import (
     PointHandle,
 )
 from sap2000py.enums import ItemType, ItemTypeElm, LoadPatternType, MatType
-from sap2000py.errors import SapAnalysisError, SapApiError, SapError
+from sap2000py.errors import SapAnalysisError, SapApiError, SapError, SapNameNotFoundError
 from sap2000py.model.results import ResultTable
 
 # -- materials --------------------------------------------------------------
@@ -217,7 +217,13 @@ def test_frame_sections_names_returns_list(make_model) -> None:
 
 
 def test_add_by_points_returns_handle(make_model) -> None:
-    h = make_model({"FrameObj.AddByPoint": ["F1", 0]})
+    h = make_model(
+        {
+            "PointObj.GetNameList": (2, ("P1", "P2"), 0),
+            "PropFrame.GetNameList": (1, ("R",), 0),
+            "FrameObj.AddByPoint": ["F1", 0],
+        }
+    )
     f = h.model.frames.add_by_points("P1", "P2", section="R")
     assert isinstance(f, FrameHandle)
     assert f.name == "F1"
@@ -234,8 +240,25 @@ def test_add_by_points_rejects_foreign_point_handle(make_model) -> None:
     assert h1.called("FrameObj.AddByPoint") == []
 
 
+def test_add_by_points_rejects_missing_point_name_before_com_call(make_model) -> None:
+    h = make_model(
+        {
+            "PointObj.GetNameList": (1, ("P1",), 0),
+            "PropFrame.GetNameList": (1, ("R",), 0),
+            "FrameObj.AddByPoint": ["F1", 0],
+        }
+    )
+
+    with pytest.raises(SapNameNotFoundError, match="No point named 'P2'"):
+        h.model.frames.add_by_points("P1", "P2", section="R")
+
+    assert h.called("FrameObj.AddByPoint") == []
+
+
 def test_add_by_points_rejects_wrong_handle_type(make_model) -> None:
-    h = make_model({"FrameObj.AddByPoint": ["F1", 0]})
+    h = make_model(
+        {"PointObj.GetNameList": (2, ("P1", "P2"), 0), "FrameObj.AddByPoint": ["F1", 0]}
+    )
     with pytest.raises(TypeError, match="expected PointHandle"):
         h.model.frames.add_by_points(FrameSectionHandle("P1"), "P2", section="R")
     with pytest.raises(TypeError, match="expected FrameSectionHandle"):
@@ -305,6 +328,15 @@ def test_add_by_coord_returns_handle(make_model) -> None:
     assert h.called("FrameObj.AddByCoord") == [
         (0.0, 1.0, 2.0, 3.0, 4.0, 5.0, "", "R", "F-user", "Bridge")
     ]
+
+
+def test_add_by_coord_rejects_missing_section_name_before_com_call(make_model) -> None:
+    h = make_model({"PropFrame.GetNameList": (1, ("R",), 0), "FrameObj.AddByCoord": ["F1", 0]})
+
+    with pytest.raises(SapNameNotFoundError, match="No frame section named 'MISSING'"):
+        h.model.frames.add_by_coord((0, 0, 0), (1, 0, 0), section="MISSING")
+
+    assert h.called("FrameObj.AddByCoord") == []
 
 
 def test_frames_count_uses_value_path(make_model) -> None:
@@ -399,6 +431,21 @@ def test_constraints_names_returns_list(make_model) -> None:
     assert h.model.constraints.names() == ["BODY", "EQ"]
 
 
+def test_manager_without_handle_class_rejects_handle_queries_before_name_lookup(make_model) -> None:
+    h = make_model({"ConstraintDef.GetNameList": (1, ("BODY",), 0)})
+
+    with pytest.raises(TypeError, match="Constraints does not define a handle class"):
+        h.model.constraints.get("BODY")
+    with pytest.raises(TypeError, match="Constraints does not define a handle class"):
+        h.model.constraints["MISSING"]
+    with pytest.raises(TypeError, match="Constraints does not define a handle class"):
+        h.model.constraints.all()
+    with pytest.raises(TypeError, match="Constraints does not define a handle class"):
+        h.model.constraints.ref("BODY")
+
+    assert h.called("ConstraintDef.GetNameList") == []
+
+
 def test_constraints_delete_passes_name(make_model) -> None:
     h = make_model({"ConstraintDef.Delete": 0})
 
@@ -468,7 +515,9 @@ def test_link_prop_handle_delete_passes_name(make_model) -> None:
 
 
 def test_links_add_by_points_returns_handle_and_passes_args(make_model) -> None:
-    h = make_model({"LinkObj.AddByPoint": ["L1", 0]})
+    h = make_model(
+        {"PointObj.GetNameList": (2, ("P1", "P2"), 0), "LinkObj.AddByPoint": ["L1", 0]}
+    )
 
     link = h.model.links.add_by_points(
         h.model.points.ref("P1"),
@@ -486,7 +535,9 @@ def test_links_add_by_points_returns_handle_and_passes_args(make_model) -> None:
 
 
 def test_links_add_by_points_rejects_wrong_handle_type(make_model) -> None:
-    h = make_model({"LinkObj.AddByPoint": ["L1", 0]})
+    h = make_model(
+        {"PointObj.GetNameList": (2, ("P1", "P2"), 0), "LinkObj.AddByPoint": ["L1", 0]}
+    )
 
     with pytest.raises(TypeError, match="expected PointHandle"):
         h.model.links.add_by_points(FrameHandle("P1"), "P2", "LP1")
@@ -634,6 +685,27 @@ def _frame_force_result(frame: str = "F1"):
     )
 
 
+def _frame_force_result_many(*frames: str):
+    count = len(frames)
+    return (
+        count,
+        tuple(frames),
+        (0.0,) * count,
+        ("E1",) * count,
+        (0.0,) * count,
+        ("DEAD",) * count,
+        ("Step",) * count,
+        (0.0,) * count,
+        (1.0,) * count,
+        (2.0,) * count,
+        (3.0,) * count,
+        (4.0,) * count,
+        (5.0,) * count,
+        (6.0,) * count,
+        0,
+    )
+
+
 def _joint_react_result(point: str = "P1"):
     return (
         1,
@@ -652,6 +724,25 @@ def _joint_react_result(point: str = "P1"):
     )
 
 
+def _joint_react_result_many(*points: str):
+    count = len(points)
+    return (
+        count,
+        tuple(points),
+        ("E1",) * count,
+        ("DEAD",) * count,
+        ("Step",) * count,
+        (0.0,) * count,
+        (1.0,) * count,
+        (2.0,) * count,
+        (3.0,) * count,
+        (4.0,) * count,
+        (5.0,) * count,
+        (6.0,) * count,
+        0,
+    )
+
+
 def _joint_displ_result(point: str = "P1"):
     return (
         1,
@@ -666,6 +757,25 @@ def _joint_displ_result(point: str = "P1"):
         (4.0,),
         (5.0,),
         (6.0,),
+        0,
+    )
+
+
+def _joint_displ_result_many(*points: str):
+    count = len(points)
+    return (
+        count,
+        tuple(points),
+        ("E1",) * count,
+        ("DEAD",) * count,
+        ("Step",) * count,
+        (0.0,) * count,
+        (1.0,) * count,
+        (2.0,) * count,
+        (3.0,) * count,
+        (4.0,) * count,
+        (5.0,) * count,
+        (6.0,) * count,
         0,
     )
 
@@ -751,7 +861,11 @@ def test_frame_handle_forces_keeps_original_error_when_combo_output_is_selected(
 
 def test_result_batch_group_is_lazy_and_does_not_select_when_cases_omitted(make_model) -> None:
     h = make_model(
-        {**_selected_output_responses(), "Results.FrameForce": _frame_force_result("G1")}
+        {
+            **_selected_output_responses(),
+            "GroupDef.GetNameList": (1, ("G1",), 0),
+            "Results.FrameForce": _frame_force_result("G1"),
+        }
     )
     plan = h.model.results.batch().frame_forces(group="G1", key="forces")
     assert h.calls == []
@@ -763,10 +877,11 @@ def test_result_batch_group_is_lazy_and_does_not_select_when_cases_omitted(make_
     assert h.called("Results.FrameForce") == [("G1", int(ItemTypeElm.GROUP_ELM))]
 
 
-def test_result_batch_selects_output_once_when_cases_are_given(make_model) -> None:
+def test_result_batch_temporarily_selects_output_when_cases_are_given(make_model) -> None:
     h = make_model(
         {
             **_selected_output_responses(),
+            "GroupDef.GetNameList": (2, ("G1", "supports"), 0),
             "Results.Setup.DeselectAllCasesAndCombosForOutput": 0,
             "Results.Setup.SetCaseSelectedForOutput": 0,
             "Results.FrameForce": _frame_force_result("G1"),
@@ -781,15 +896,63 @@ def test_result_batch_selects_output_once_when_cases_are_given(make_model) -> No
     )
 
     assert set(tables) == {"forces", "reactions"}
-    assert h.called("Results.Setup.DeselectAllCasesAndCombosForOutput") == [()]
-    assert h.called("Results.Setup.SetCaseSelectedForOutput") == [("DEAD", True)]
+    assert h.called("Results.Setup.DeselectAllCasesAndCombosForOutput") == [(), ()]
+    assert h.called("Results.Setup.SetCaseSelectedForOutput") == [("DEAD", True), ("DEAD", True)]
     assert h.called("Results.FrameForce") == [("G1", int(ItemTypeElm.GROUP_ELM))]
     assert h.called("Results.JointReact") == [("supports", int(ItemTypeElm.GROUP_ELM))]
+
+
+def test_result_batch_restores_selected_output_between_batches_and_single_read(make_model) -> None:
+    selected_cases = {"BASE"}
+
+    def deselect_output() -> int:
+        selected_cases.clear()
+        return 0
+
+    def set_case_output(case: str, selected: bool) -> int:
+        if selected:
+            selected_cases.add(case)
+        else:
+            selected_cases.discard(case)
+        return 0
+
+    def get_case_output(case: str, _selected: bool) -> tuple[bool, int]:
+        return case in selected_cases, 0
+
+    def frame_force(name: str, _item_type: int) -> tuple[object, ...]:
+        case = next(iter(selected_cases)) if selected_cases else "NONE"
+        result = list(_frame_force_result(name))
+        result[5] = (case,)
+        return tuple(result)
+
+    h = make_model(
+        {
+            "LoadCases.GetNameList": (3, ("BASE", "DEAD", "LIVE"), 0),
+            "Results.Setup.GetCaseSelectedForOutput": get_case_output,
+            "RespCombo.GetNameList": (0, (), 0),
+            "Results.Setup.DeselectAllCasesAndCombosForOutput": deselect_output,
+            "Results.Setup.SetCaseSelectedForOutput": set_case_output,
+            "FrameObj.GetNameList": (1, ("F1",), 0),
+            "Results.FrameForce": frame_force,
+        }
+    )
+
+    dead = h.model.results.batch(cases=["DEAD"]).frame_forces(frames=["F1"]).collect()
+    assert dead["frame_forces"]["case"] == ("DEAD",)
+    assert selected_cases == {"BASE"}
+
+    live = h.model.results.batch(cases=["LIVE"]).frame_forces(frames=["F1"]).collect()
+    assert live["frame_forces"]["case"] == ("LIVE",)
+    assert selected_cases == {"BASE"}
+
+    single = h.model.frames.ref("F1").forces()
+    assert single["case"] == ("BASE",)
 
 
 def test_result_batch_modal_periods_uses_default_key_and_combo_selection(make_model) -> None:
     h = make_model(
         {
+            **_selected_output_responses(selected=False),
             "Results.Setup.DeselectAllCasesAndCombosForOutput": 0,
             "Results.Setup.SetComboSelectedForOutput": 0,
             "Results.ModalPeriod": (
@@ -810,7 +973,7 @@ def test_result_batch_modal_periods_uses_default_key_and_combo_selection(make_mo
 
     assert set(tables) == {"modal_periods"}
     assert tables["modal_periods"]["mode"] == (1,)
-    assert h.called("Results.Setup.DeselectAllCasesAndCombosForOutput") == [()]
+    assert h.called("Results.Setup.DeselectAllCasesAndCombosForOutput") == [(), ()]
     assert h.called("Results.Setup.SetCaseSelectedForOutput") == []
     assert h.called("Results.Setup.SetComboSelectedForOutput") == [("COMB1", True)]
 
@@ -835,6 +998,7 @@ def test_result_batch_frames_default_to_object_reads_without_temp_group(make_mod
     h = make_model(
         {
             **_selected_output_responses(),
+            "FrameObj.GetNameList": (2, ("F1", "F2"), 0),
             "Results.FrameForce": lambda name, _item_type: _frame_force_result(name),
         }
     )
@@ -847,6 +1011,42 @@ def test_result_batch_frames_default_to_object_reads_without_temp_group(make_mod
     ]
     assert h.called("GroupDef.SetGroup") == []
     assert h.called("GroupDef.Delete") == []
+
+
+def test_result_batch_rejects_missing_frame_target_before_read(make_model) -> None:
+    h = make_model(
+        {
+            "FrameObj.GetNameList": (1, ("F1",), 0),
+            "Results.FrameForce": lambda name, _item_type: _frame_force_result(name),
+        }
+    )
+
+    with pytest.raises(SapNameNotFoundError, match="No frame named 'F2'"):
+        h.model.results.batch().frame_forces(frames=["F1", "F2"], key="forces").collect()
+
+    assert h.called("Results.FrameForce") == []
+
+
+def test_result_batch_rejects_missing_rows_for_requested_target(make_model) -> None:
+    def frame_force(name: str, _item_type: int) -> tuple[object, ...]:
+        if name == "F2":
+            return (0, (), (), (), (), (), (), (), (), (), (), (), (), (), 0)
+        return _frame_force_result(name)
+
+    h = make_model(
+        {
+            "FrameObj.GetNameList": (2, ("F1", "F2"), 0),
+            "Results.FrameForce": frame_force,
+        }
+    )
+
+    with pytest.raises(ValueError, match="F2"):
+        h.model.results.batch().frame_forces(frames=["F1", "F2"], key="forces").collect()
+
+    assert h.called("Results.FrameForce") == [
+        ("F1", int(ItemTypeElm.OBJECT_ELM)),
+        ("F2", int(ItemTypeElm.OBJECT_ELM)),
+    ]
 
 
 def test_result_batch_rejects_missing_or_ambiguous_single_target(make_model) -> None:
@@ -871,10 +1071,11 @@ def test_result_batch_frames_temporary_group_is_explicit_opt_in(make_model) -> N
     h = make_model(
         {
             **_selected_output_responses(),
+            "FrameObj.GetNameList": (2, ("F1", "F2"), 0),
             "GroupDef.SetGroup": 0,
             "FrameObj.SetGroupAssign": 0,
             "GroupDef.Delete": 0,
-            "Results.FrameForce": lambda name, _item_type: _frame_force_result(name),
+            "Results.FrameForce": lambda _name, _item_type: _frame_force_result_many("F1", "F2"),
         }
     )
 
@@ -884,7 +1085,7 @@ def test_result_batch_frames_temporary_group_is_explicit_opt_in(make_model) -> N
         .collect()
     )
 
-    assert tables["forces"]["P"] == (1.0,)
+    assert tables["forces"]["frame"] == ("F1", "F2")
     (group_name,) = h.called("GroupDef.SetGroup")[0]
     assert group_name.startswith("__sap2000py_results_")
     assert h.called("FrameObj.SetGroupAssign") == [
@@ -899,6 +1100,7 @@ def test_result_batch_temporary_group_is_deleted_when_read_fails(make_model) -> 
     h = make_model(
         {
             **_selected_output_responses(selected=False),
+            "FrameObj.GetNameList": (2, ("F1", "F2"), 0),
             "GroupDef.SetGroup": 0,
             "FrameObj.SetGroupAssign": 0,
             "GroupDef.Delete": 0,
@@ -918,7 +1120,9 @@ def test_result_batch_temporary_group_is_deleted_when_read_fails(make_model) -> 
 
 
 def test_result_batch_joint_displacement_single_target_uses_object_read(make_model) -> None:
-    h = make_model({"Results.JointDispl": _joint_displ_result("P1")})
+    h = make_model(
+        {"PointObj.GetNameList": (1, ("P1",), 0), "Results.JointDispl": _joint_displ_result("P1")}
+    )
 
     tables = h.model.results.batch().joint_displacements(point="P1", key="displ").collect()
 
@@ -931,6 +1135,7 @@ def test_result_batch_points_default_to_object_reads_without_temp_group(make_mod
     h = make_model(
         {
             **_selected_output_responses(),
+            "PointObj.GetNameList": (2, ("P1", "P2"), 0),
             "Results.JointReact": lambda name, _item_type: _joint_react_result(name),
         }
     )
@@ -949,10 +1154,11 @@ def test_result_batch_points_default_to_object_reads_without_temp_group(make_mod
 def test_result_batch_point_reactions_temporary_group_is_explicit_opt_in(make_model) -> None:
     h = make_model(
         {
+            "PointObj.GetNameList": (2, ("P1", "P2"), 0),
             "GroupDef.SetGroup": 0,
             "PointObj.SetGroupAssign": 0,
             "GroupDef.Delete": 0,
-            "Results.JointReact": lambda name, _item_type: _joint_react_result(name),
+            "Results.JointReact": lambda _name, _item_type: _joint_react_result_many("P1", "P2"),
         }
     )
 
@@ -962,7 +1168,7 @@ def test_result_batch_point_reactions_temporary_group_is_explicit_opt_in(make_mo
         .collect()
     )
 
-    assert tables["reactions"]["F1"] == (1.0,)
+    assert tables["reactions"]["joint"] == ("P1", "P2")
     (group_name,) = h.called("GroupDef.SetGroup")[0]
     assert group_name.startswith("__sap2000py_results_")
     assert h.called("PointObj.SetGroupAssign") == [
@@ -977,10 +1183,11 @@ def test_result_batch_points_temporary_group_is_explicit_opt_in(make_model) -> N
     h = make_model(
         {
             **_selected_output_responses(),
+            "PointObj.GetNameList": (2, ("P1", "P2"), 0),
             "GroupDef.SetGroup": 0,
             "PointObj.SetGroupAssign": 0,
             "GroupDef.Delete": 0,
-            "Results.JointDispl": lambda name, _item_type: _joint_displ_result(name),
+            "Results.JointDispl": lambda _name, _item_type: _joint_displ_result_many("P1", "P2"),
         }
     )
 
@@ -990,7 +1197,7 @@ def test_result_batch_points_temporary_group_is_explicit_opt_in(make_model) -> N
         .collect()
     )
 
-    assert tables["displ"]["U1"] == (1.0,)
+    assert tables["displ"]["joint"] == ("P1", "P2")
     (group_name,) = h.called("GroupDef.SetGroup")[0]
     assert group_name.startswith("__sap2000py_results_")
     assert h.called("PointObj.SetGroupAssign") == [

@@ -105,6 +105,19 @@ def test_attach_raises_when_no_running_instance(monkeypatch: pytest.MonkeyPatch)
         SapClient.attach()
 
 
+def test_attach_wraps_com_error_when_no_running_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class MissingHelper:
+        def GetObject(self, _progid: str) -> None:
+            raise client_module.COMError(-1, "not running", None)
+
+    monkeypatch.setattr(client_module, "_make_helper", MissingHelper)
+
+    with pytest.raises(SapConnectionError, match="No running SAP2000 instance"):
+        SapClient.attach()
+
+
 def test_installations_delegates_to_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
     discovered = [Installation(version="25.1.0", major=25, path=Path("C:/SAP25/SAP2000.exe"))]
     monkeypatch.setattr(client_module, "installations", lambda: discovered)
@@ -179,6 +192,17 @@ def test_context_exit_surfaces_teardown_failure_when_body_clean() -> None:
 def test_launch_version_and_program_path_are_mutually_exclusive() -> None:
     with pytest.raises(ValueError, match="version and program_path"):
         SapClient.launch(version="25", program_path="C:/SAP2000.exe")
+
+
+def test_launch_wraps_com_error_for_bad_program_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    class MissingHelper:
+        def CreateObject(self, _path: str) -> None:
+            raise client_module.COMError(-1, "missing executable", None)
+
+    monkeypatch.setattr(client_module, "_make_helper", MissingHelper)
+
+    with pytest.raises(SapConnectionError, match="Cannot start a new SAP2000 instance"):
+        SapClient.launch(program_path="Z:/missing/SAP2000.exe")
 
 
 def test_launch_version_not_found_lists_available(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -293,7 +317,7 @@ def test_attach_or_launch_rejects_version_and_program_path_before_attach(
     assert launch_calls == []
 
 
-def test_attach_or_launch_discards_mismatched_running_version(
+def test_attach_or_launch_raises_on_mismatched_running_version_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     attached = SapClient(FakeSapObject([0], version="24.0.0"), owns_process=False)
@@ -310,7 +334,35 @@ def test_attach_or_launch_discards_mismatched_running_version(
     monkeypatch.setattr(SapClient, "attach", classmethod(fake_attach))
     monkeypatch.setattr(SapClient, "launch", classmethod(fake_launch))
 
-    client = SapClient.attach_or_launch(version="25", visible=False)
+    with pytest.raises(SapVersionMismatchError):
+        SapClient.attach_or_launch(version="25", visible=False)
+
+    assert launch_calls == []
+    assert attached.raw_object.exit_calls == 0
+
+
+def test_attach_or_launch_can_launch_on_mismatched_running_version_when_opted_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attached = SapClient(FakeSapObject([0], version="24.0.0"), owns_process=False)
+    launched = SapClient(FakeSapObject([0], version="25.0.0"), owns_process=True)
+    launch_calls: list[dict[str, object]] = []
+
+    def fake_attach(cls, *, policy):
+        return attached
+
+    def fake_launch(cls, **kwargs):
+        launch_calls.append(kwargs)
+        return launched
+
+    monkeypatch.setattr(SapClient, "attach", classmethod(fake_attach))
+    monkeypatch.setattr(SapClient, "launch", classmethod(fake_launch))
+
+    client = SapClient.attach_or_launch(
+        version="25",
+        visible=False,
+        launch_on_version_mismatch=True,
+    )
 
     assert client is launched
     assert launch_calls == [{"version": "25", "visible": False}]

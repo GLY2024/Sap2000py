@@ -43,10 +43,14 @@ class Manager(Generic[H]):
 
     def all(self) -> list[H]:
         """Return live handles for all names known to this manager."""
+        if self._handle_cls is None:
+            raise TypeError(f"{type(self).__name__} does not define a handle class.")
         return [self._handle(name) for name in self.names()]
 
     def get(self, name: str) -> H:
         """Return a live handle after validating that ``name`` exists."""
+        if self._handle_cls is None:
+            raise TypeError(f"{type(self).__name__} does not define a handle class.")
         available = self.names()
         if name not in available:
             raise SapNameNotFoundError(name, kind=self._kind, available=available)
@@ -56,7 +60,11 @@ class Manager(Generic[H]):
         return self.get(name)
 
     def ref(self, obj: H | str) -> H:
-        """Normalize ``obj`` to this manager's handle type without existence checks."""
+        """Normalize ``obj`` to this manager's handle type.
+
+        Raw strings stay unchecked for internal known-good references. Unbound
+        typed handles are validated before binding to this manager.
+        """
         if self._handle_cls is None:
             raise TypeError(f"{type(self).__name__} does not define a handle class.")
         if isinstance(obj, str):
@@ -70,8 +78,14 @@ class Manager(Generic[H]):
         if obj._owner is self:
             return obj
         if obj._owner is None:
-            return self._handle(obj.name)
+            return self.get(obj.name)
         raise ValueError(
             f"{type(obj).__name__}({obj.name!r}) belongs to another manager/model; "
             f"pass {type(obj).__name__}.name to rebind explicitly."
         )
+
+    def _checked_ref(self, obj: H | str) -> H:
+        """Normalize public inputs, validating raw strings before use."""
+        if isinstance(obj, str):
+            return self.get(obj)
+        return self.ref(obj)

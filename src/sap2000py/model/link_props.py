@@ -17,7 +17,7 @@ from ..handles import Handle
 from ._base import Manager
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class LinkPropHandle(Handle):
     """A live link property reference."""
 

@@ -27,9 +27,11 @@ def bridge_responses() -> dict[str, Any]:
     """
     return {
         "PointObj.AddCartesian": lambda *a: [a[4] or "P", 0],
+        "PointObj.GetNameList": (2, ("A", "B"), 0),
         "PointObj.SetRestraint": 0,
         "PointObj.SetSpring": 0,
         "PointObj.SetConstraint": 0,
+        "PropFrame.GetNameList": (4, ("PierSec", "GirderSec", "P", "G"), 0),
         "FrameObj.AddByPoint": lambda *a: [a[4] or "F", 0],
         "LinkObj.AddByPoint": lambda *a: [a[5] or "L", 0],
         "PropLink.SetLinear": 0,

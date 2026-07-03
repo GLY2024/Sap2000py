@@ -46,12 +46,17 @@ the highest known patch version, use `program_path=` to choose explicitly.
 
 ```python
 client = SapClient.attach()             # raises if nothing is running
-client = SapClient.attach_or_launch(version="25")   # attach matching version, else launch
+client = SapClient.attach_or_launch(version="25")   # attach matching version, else raise
 ```
 
 `attach()` never silently launches a new instance — that ambiguity was a bug
 source in the old code. An attached instance is **not** owned: `close()` just
 drops the connection and leaves SAP2000 running.
+
+With `version=`, `attach_or_launch()` raises `SapVersionMismatchError` if a
+running SAP2000 instance has a different major version. To explicitly leave that
+running instance alone and start a new matching process, pass
+`launch_on_version_mismatch=True`.
 
 ## Closing and saving
 

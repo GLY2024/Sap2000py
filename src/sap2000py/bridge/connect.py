@@ -61,13 +61,14 @@ def snap_connect(
     """
     how = Connection(how)
     dof6 = to_dof_mask(dof, default=True)
-    a_ref = model.points.ref(a)
-    b_ref = model.points.ref(b)
+    a_ref = model.points._checked_ref(a)
+    b_ref = model.points._checked_ref(b)
     label = name or f"{a_ref.name}~{b_ref.name}"
 
     if how is Connection.RIGID_LINK:
-        prop = f"{label}_rigid"
-        model.link_props.add_linear(prop, [_RIGID_STIFFNESS] * 6, fixed=[True] * 6)
+        prop = model.link_props.add_linear(
+            f"{label}_rigid", [_RIGID_STIFFNESS] * 6, fixed=[True] * 6
+        )
         link = model.links.add_by_points(a_ref, b_ref, prop, name=label)
         return link.name
 

@@ -16,10 +16,13 @@ Other ways to connect:
 ```python
 client = SapClient.attach()             # an already-running instance (raises if none)
 client = SapClient.attach_or_launch()   # attach, else launch
+client = SapClient.attach_or_launch(version="25")  # attach matching version, else raise
 ```
 
 When you launch, you own the process — `close()` (or the `with` block) exits
 SAP2000. When you `attach`, you don't — closing just drops the connection.
+Pass `launch_on_version_mismatch=True` only when you explicitly want a new
+process if the running SAP2000 major version does not match `version=`.
 
 ## Build a tiny model
 

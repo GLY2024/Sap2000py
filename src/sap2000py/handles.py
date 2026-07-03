@@ -26,6 +26,21 @@ class Handle:
     def __str__(self) -> str:
         return self.name
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Handle) or other.__class__ is not self.__class__:
+            return NotImplemented
+        other_handle = other
+        if (
+            self._owner is not None
+            and other_handle._owner is not None
+            and self._owner is not other_handle._owner
+        ):
+            return False
+        return self.name == other_handle.name
+
+    def __hash__(self) -> int:
+        return hash((type(self), self.name))
+
     def _require_owner(self) -> Any:
         """Return the manager this handle is bound to, or raise a clear error."""
         if self._owner is None:
@@ -37,22 +52,22 @@ class Handle:
         return self._owner
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class CableHandle(Handle):
     """A cable object."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class TendonHandle(Handle):
     """A tendon object."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class AreaHandle(Handle):
     """An area (shell) object."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class SolidHandle(Handle):
     """A solid object."""
 

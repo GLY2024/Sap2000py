@@ -9,7 +9,7 @@ from ..handles import Handle
 from ._base import Manager
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class GroupHandle(Handle):
     """A live group definition reference."""
 

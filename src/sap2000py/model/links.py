@@ -11,7 +11,7 @@ from .link_props import LinkPropHandle
 from .points import PointHandle
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class LinkHandle(Handle):
     """A live link object reference."""
 
@@ -44,9 +44,9 @@ class Links(Manager[LinkHandle]):
         SAP2000 chose if ``name`` was blank or taken).
         """
         # AddByPoint(Point1, Point2, Name[in,out], IsSingleJoint, PropName, UserName)
-        point_i_ref = self._model.points.ref(point_i)
-        point_j_ref = self._model.points.ref(point_j)
-        prop_ref = self._model.link_props.ref(prop)
+        point_i_ref = self._model.points._checked_ref(point_i)
+        point_j_ref = self._model.points._checked_ref(point_j)
+        prop_ref = self._model.link_props._checked_ref(prop)
         assigned = self._g.call(
             self._raw.LinkObj.AddByPoint,
             point_i_ref.name,

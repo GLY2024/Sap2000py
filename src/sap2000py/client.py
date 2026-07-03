@@ -18,7 +18,7 @@ from loguru import logger
 from .discovery import Installation, _major, _version_key, installations
 from .enums import Units
 from .errors import SapConnectionError, SapVersionMismatchError, SapVersionNotFoundError
-from .gateway import ComGateway, ErrorPolicy
+from .gateway import COMError, ComGateway, ErrorPolicy
 from .model import Model
 from .native import NativeApi
 
@@ -140,7 +140,7 @@ class SapClient:
                 sap_object = helper.CreateObject(str(program_path))
             else:
                 sap_object = helper.CreateObjectProgID(_PROGID)
-        except OSError as exc:
+        except (OSError, COMError) as exc:
             raise SapConnectionError(
                 f"Cannot start a new SAP2000 instance"
                 f"{f' from {program_path}' if program_path else ''}."
@@ -173,7 +173,7 @@ class SapClient:
         helper = _make_helper()
         try:
             sap_object = helper.GetObject(_PROGID)
-        except OSError as exc:
+        except (OSError, COMError) as exc:
             raise SapConnectionError("No running SAP2000 instance to attach to.") from exc
         if sap_object is None:
             raise SapConnectionError("No running SAP2000 instance to attach to.")
@@ -181,7 +181,13 @@ class SapClient:
         return cls(sap_object, owns_process=False, policy=policy)
 
     @classmethod
-    def attach_or_launch(cls, *, version: str | None = None, **launch_kwargs: Any) -> SapClient:
+    def attach_or_launch(
+        cls,
+        *,
+        version: str | None = None,
+        launch_on_version_mismatch: bool = False,
+        **launch_kwargs: Any,
+    ) -> SapClient:
         """Attach to a running instance, or launch a new one if none exists."""
         if version is not None and launch_kwargs.get("program_path") is not None:
             raise ValueError("version and program_path are mutually exclusive.")
@@ -195,11 +201,14 @@ class SapClient:
         if version is None:
             return client
         requested_major = _major(version)
-        if client.model.sap_version_major == requested_major:
+        actual_major = client.model.sap_version_major
+        if actual_major == requested_major:
             return client
+        if not launch_on_version_mismatch:
+            raise SapVersionMismatchError(requested_major, actual_major)
         logger.info(
             "Running SAP2000 major version {} does not match requested {}; launching a new one.",
-            client.model.sap_version_major,
+            actual_major,
             requested_major,
         )
         return cls.launch(version=version, **launch_kwargs)

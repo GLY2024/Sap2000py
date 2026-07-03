@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+_MAX_AVAILABLE_NAMES_IN_MESSAGE = 25
+
 
 class SapError(Exception):
     """Base class for every error raised by sap2000py."""
@@ -100,7 +102,12 @@ class SapNameNotFoundError(SapError):
         self.available = available
         message = f"No {kind} named {name!r}."
         if available is not None:
-            message = f"{message} Available names: {available!r}."
+            shown = available[:_MAX_AVAILABLE_NAMES_IN_MESSAGE]
+            suffix = ""
+            remaining = len(available) - len(shown)
+            if remaining > 0:
+                suffix = f" ... and {remaining} more"
+            message = f"{message} Available names: {shown!r}{suffix}."
         super().__init__(message)
 
 

@@ -27,7 +27,7 @@ _STEEL_GRADE = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class MaterialHandle(Handle):
     """A live material property reference."""
 

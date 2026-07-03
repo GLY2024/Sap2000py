@@ -95,9 +95,9 @@ Unlike `client.model.units(...)`, `m.results.select_output(...)` is not a
 restoring context manager. SAP2000 output case/combo selection is persistent
 global session state, so it remains active until you select different output.
 
-For many objects, use the delayed batch API. It changes the SAP2000 output
-selection only when `cases=` or `combos=` is provided, and it does so once at
-`collect()` time:
+For many objects, use the delayed batch API. With `cases=` or `combos=`, it
+temporarily selects that output for `collect()` and then restores the previous
+SAP2000 output selection:
 
 ```python
 tables = (

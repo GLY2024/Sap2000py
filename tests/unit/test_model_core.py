@@ -79,6 +79,16 @@ def test_points_get_missing_name_raises_typed_error(make_model) -> None:
         h.model.points.get("P9")
 
 
+def test_name_not_found_error_truncates_available_names() -> None:
+    names = [f"P{i}" for i in range(30)]
+    error = SapNameNotFoundError("PX", kind="point", available=names)
+
+    assert error.available == names
+    assert "P24" in str(error)
+    assert "P25" not in str(error)
+    assert "... and 5 more" in str(error)
+
+
 def test_points_ref_mints_handle_without_round_trip(make_model) -> None:
     h = make_model({"PointObj.GetNameList": (1, ("P1",), 0)})
     p = h.model.points.ref("P9")
@@ -88,7 +98,7 @@ def test_points_ref_mints_handle_without_round_trip(make_model) -> None:
 
 
 def test_points_ref_owner_rules(make_model) -> None:
-    h1 = make_model()
+    h1 = make_model({"PointObj.GetNameList": (1, ("P2",), 0)})
     h2 = make_model()
     owned = h1.model.points.ref("P1")
     assert h1.model.points.ref(owned) is owned
@@ -104,6 +114,15 @@ def test_points_ref_owner_rules(make_model) -> None:
 
     with pytest.raises(TypeError, match="expected PointHandle"):
         h1.model.points.ref(FrameHandle("F1"))
+
+
+def test_ownerless_handle_ref_validates_name_before_binding(make_model) -> None:
+    h = make_model({"PointObj.GetNameList": (1, ("P1",), 0)})
+
+    with pytest.raises(SapNameNotFoundError, match="No point named 'P9'"):
+        h.model.points.ref(PointHandle("P9"))
+
+    assert h.called("PointObj.GetNameList") == [()]
 
 
 def test_point_handle_restrain_validates_length(make_model) -> None:

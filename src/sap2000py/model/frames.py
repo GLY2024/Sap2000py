@@ -15,7 +15,7 @@ from .groups import GroupHandle
 from .points import PointHandle
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class FrameHandle(Handle):
     """A live frame object reference."""
 
@@ -161,9 +161,9 @@ class Frames(Manager[FrameHandle]):
         name: str = "",
     ) -> FrameHandle:
         """Add a frame between two existing points. Wraps ``FrameObj.AddByPoint``."""
-        i_ref = self._model.points.ref(i)
-        j_ref = self._model.points.ref(j)
-        section_ref = self._model.frame_sections.ref(section)
+        i_ref = self._model.points._checked_ref(i)
+        j_ref = self._model.points._checked_ref(j)
+        section_ref = self._model.frame_sections._checked_ref(section)
         assigned = self._g.call(
             self._raw.FrameObj.AddByPoint,
             i_ref.name,
@@ -187,7 +187,7 @@ class Frames(Manager[FrameHandle]):
         """Add a frame between two coordinates. Wraps ``FrameObj.AddByCoord``."""
         xi, yi, zi = start
         xj, yj, zj = end
-        section_ref = self._model.frame_sections.ref(section)
+        section_ref = self._model.frame_sections._checked_ref(section)
         assigned = self._g.call(
             self._raw.FrameObj.AddByCoord,
             float(xi),

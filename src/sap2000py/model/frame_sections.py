@@ -11,7 +11,7 @@ from ._base import Manager
 from .materials import MaterialHandle
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class FrameSectionHandle(Handle):
     """A live frame section property reference."""
 

@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from .._optional import require
 from ..enums import ItemTypeElm
-from ..errors import SapApiError
+from ..errors import SapApiError, SapNameNotFoundError
 from ..handles import Handle
 from ._base import Manager
 from .frames import FrameHandle
@@ -43,6 +43,7 @@ _RequestKind = Literal[
     "joint_displacements_temp_group",
     "modal_periods",
 ]
+_ResultObjectColumn = Literal["frame", "joint"]
 
 
 @dataclass(frozen=True)
@@ -262,38 +263,90 @@ class ResultBatch:
 
     def collect(self) -> dict[str, ResultTable]:
         """Execute all registered reads and return tables by key."""
+        restore_selection: tuple[tuple[str, ...], tuple[str, ...]] | None = None
         if self._cases is not None or self._combos is not None:
+            restore_selection = self._results._selected_output()
             self._results.select_output(cases=self._cases, combos=self._combos)
 
+        try:
+            return self._collect_requests()
+        finally:
+            if restore_selection is not None:
+                cases, combos = restore_selection
+                self._results.select_output(cases=cases, combos=combos)
+
+    def _collect_requests(self) -> dict[str, ResultTable]:
         tables: dict[str, ResultTable] = {}
         for request in self._requests:
             if request.kind == "modal_periods":
                 tables[request.key] = self._results.modal_periods()
-                continue
-            if request.kind == "frame_forces_temp_group":
+            elif request.kind == "frame_forces_temp_group":
+                self._validate_targets(request.targets, manager=self._results._model.frames)
                 tables[request.key] = self._collect_frame_temp_group(request.targets)
-                continue
-            if request.kind == "joint_reactions_temp_group":
+            elif request.kind == "joint_reactions_temp_group":
+                self._validate_targets(request.targets, manager=self._results._model.points)
                 tables[request.key] = self._collect_point_temp_group(
                     request.targets, kind="joint_reactions"
                 )
-                continue
-            if request.kind == "joint_displacements_temp_group":
+            elif request.kind == "joint_displacements_temp_group":
+                self._validate_targets(request.targets, manager=self._results._model.points)
                 tables[request.key] = self._collect_point_temp_group(
                     request.targets, kind="joint_displacements"
                 )
-                continue
-
-            reads: list[ResultTable] = []
-            for target in request.targets:
-                if request.kind == "frame_forces":
-                    reads.append(self._results._frame_forces(target.name, target.item_type))
-                elif request.kind == "joint_reactions":
-                    reads.append(self._results._joint_reactions(target.name, target.item_type))
-                else:
-                    reads.append(self._results._joint_displacements(target.name, target.item_type))
-            tables[request.key] = _merge_tables(reads)
+            else:
+                tables[request.key] = self._collect_object_request(request)
         return tables
+
+    def _collect_object_request(self, request: _Request) -> ResultTable:
+        if request.kind == "frame_forces":
+            self._validate_targets(request.targets, manager=self._results._model.frames)
+        else:
+            self._validate_targets(request.targets, manager=self._results._model.points)
+
+        reads: list[ResultTable] = []
+        for target in request.targets:
+            if request.kind == "frame_forces":
+                table = self._results._frame_forces(target.name, target.item_type)
+                self._ensure_target_rows(table, target, column="frame")
+            elif request.kind == "joint_reactions":
+                table = self._results._joint_reactions(target.name, target.item_type)
+                self._ensure_target_rows(table, target, column="joint")
+            else:
+                table = self._results._joint_displacements(target.name, target.item_type)
+                self._ensure_target_rows(table, target, column="joint")
+            reads.append(table)
+        return _merge_tables(reads)
+
+    def _validate_targets(self, targets: Sequence[_Target], *, manager: Any) -> None:
+        object_names = [
+            target.name for target in targets if target.item_type is ItemTypeElm.OBJECT_ELM
+        ]
+        if object_names:
+            self._validate_names(object_names, manager=manager)
+        group_names = [
+            target.name for target in targets if target.item_type is ItemTypeElm.GROUP_ELM
+        ]
+        if group_names:
+            self._validate_names(group_names, manager=self._results._model.groups)
+
+    def _validate_names(self, names: Sequence[str], *, manager: Any) -> None:
+        available = manager.names()
+        missing = [name for name in names if name not in available]
+        if missing:
+            raise SapNameNotFoundError(missing[0], kind=manager._kind, available=available)
+
+    def _ensure_target_rows(
+        self,
+        table: ResultTable,
+        target: _Target,
+        *,
+        column: _ResultObjectColumn,
+    ) -> None:
+        if target.item_type is not ItemTypeElm.OBJECT_ELM:
+            return
+        returned = {str(name) for name in table[column]}
+        if target.name not in returned:
+            raise ValueError(f"result batch returned no {column} rows for target {target.name!r}.")
 
     def _collect_frame_temp_group(self, targets: Sequence[_Target]) -> ResultTable:
         group_name = f"__sap2000py_results_{uuid4().hex}"
@@ -302,7 +355,9 @@ class ResultBatch:
             group = self._results._model.groups.add(group_name)
             for target in targets:
                 self._results._model.frames.ref(target.name).group(group)
-            return self._results._frame_forces(group_name, ItemTypeElm.GROUP_ELM)
+            table = self._results._frame_forces(group_name, ItemTypeElm.GROUP_ELM)
+            self._ensure_targets_rows(table, targets, column="frame")
+            return table
         finally:
             if group is not None:
                 group.delete()
@@ -320,11 +375,27 @@ class ResultBatch:
             for target in targets:
                 self._results._model.points.ref(target.name).group(group)
             if kind == "joint_reactions":
-                return self._results._joint_reactions(group_name, ItemTypeElm.GROUP_ELM)
-            return self._results._joint_displacements(group_name, ItemTypeElm.GROUP_ELM)
+                table = self._results._joint_reactions(group_name, ItemTypeElm.GROUP_ELM)
+            else:
+                table = self._results._joint_displacements(group_name, ItemTypeElm.GROUP_ELM)
+            self._ensure_targets_rows(table, targets, column="joint")
+            return table
         finally:
             if group is not None:
                 group.delete()
+
+    def _ensure_targets_rows(
+        self,
+        table: ResultTable,
+        targets: Sequence[_Target],
+        *,
+        column: _ResultObjectColumn,
+    ) -> None:
+        returned = {str(name) for name in table[column]}
+        missing = [target.name for target in targets if target.name not in returned]
+        if missing:
+            joined = ", ".join(repr(name) for name in missing)
+            raise ValueError(f"result batch returned no {column} rows for targets: {joined}.")
 
 
 class Results(Manager[Handle]):
@@ -393,6 +464,37 @@ class Results(Manager[Handle]):
                 return True
 
         return False
+
+    def _selected_output(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        selected_cases: list[str] = []
+        _case_count, case_names = self._g.call(
+            self._raw.LoadCases.GetNameList, api_name="LoadCases.GetNameList"
+        )
+        for case in case_names or ():
+            selected = self._g.call(
+                self._raw.Results.Setup.GetCaseSelectedForOutput,
+                case,
+                False,
+                api_name="Results.Setup.GetCaseSelectedForOutput",
+            )
+            if bool(selected):
+                selected_cases.append(str(case))
+
+        selected_combos: list[str] = []
+        _combo_count, combo_names = self._g.call(
+            self._raw.RespCombo.GetNameList, api_name="RespCombo.GetNameList"
+        )
+        for combo in combo_names or ():
+            selected = self._g.call(
+                self._raw.Results.Setup.GetComboSelectedForOutput,
+                combo,
+                False,
+                api_name="Results.Setup.GetComboSelectedForOutput",
+            )
+            if bool(selected):
+                selected_combos.append(str(combo))
+
+        return tuple(selected_cases), tuple(selected_combos)
 
     def _call_result_with_output_hint(
         self, com_func: Any, api_name: str, args: tuple[Any, ...]

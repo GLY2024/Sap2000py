@@ -12,7 +12,7 @@ from ._base import Manager
 from .groups import GroupHandle
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class PointHandle(Handle):
     """A live point (joint) object reference."""
 
