@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from sap2000py.errors import SapApiError
+import sap2000py.gateway as gateway_module
+from sap2000py.errors import (
+    MissingDependencyError,
+    SapApiError,
+    SapComError,
+    SapNameNotFoundError,
+)
 from sap2000py.gateway import ComGateway, ErrorPolicy
 
 
@@ -21,6 +27,25 @@ def test_call_bare_nonzero_status_raises() -> None:
         gateway().call(lambda: 1, api_name="Setter")
     assert info.value.code == 1
     assert info.value.api_name == "Setter"
+
+
+def test_call_wraps_com_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeComError(Exception):
+        def __init__(self, hresult: int) -> None:
+            self.hresult = hresult
+            super().__init__()
+
+    def fail(*args: object) -> int:
+        raise FakeComError(0x80004005)
+
+    monkeypatch.setattr(gateway_module, "COMError", FakeComError)
+
+    with pytest.raises(SapComError) as info:
+        gateway().call(fail, "P1", 6, api_name="PointObj.SetRestraint")
+
+    assert info.value.api_name == "PointObj.SetRestraint"
+    assert info.value.args_passed == ("P1", 6)
+    assert info.value.hresult == 0x80004005
 
 
 def test_call_tuple_unpacks_single_out_and_checks_status() -> None:
@@ -117,3 +142,53 @@ def test_args_are_forwarded() -> None:
 
     gateway().call(fn, 3, 4, api_name="Fn")
     assert seen == [(3, 4)]
+
+
+def test_sap_com_error_message_formats_hresult_conditionally() -> None:
+    with_hresult = SapComError("File.Save", ("model.sdb",), hresult=0x80004005)
+    without_hresult = SapComError("File.Save", ("model.sdb",), hresult=None)
+
+    assert str(with_hresult) == "COM call to 'File.Save' failed (HRESULT=0x80004005)."
+    assert str(without_hresult) == "COM call to 'File.Save' failed."
+    assert "HRESULT" not in str(without_hresult)
+
+
+def test_missing_dependency_error_records_feature_extra_and_install_hint() -> None:
+    error = MissingDependencyError("bridge YAML configs", "bridge")
+
+    assert error.feature == "bridge YAML configs"
+    assert error.extra == "bridge"
+    assert str(error) == (
+        "bridge YAML configs requires the optional 'bridge' dependencies. "
+        "Install them with: pip install 'sap2000py[bridge]'"
+    )
+
+
+def test_name_not_found_error_without_available_names_omits_available_section() -> None:
+    error = SapNameNotFoundError("PX", kind="point")
+
+    assert str(error) == "No point named 'PX'."
+    assert "Available names" not in str(error)
+
+
+def test_name_not_found_error_at_available_name_limit_is_not_truncated() -> None:
+    names = [f"P{i}" for i in range(25)]
+    error = SapNameNotFoundError("PX", kind="point", available=names)
+
+    assert str(error) == f"No point named 'PX'. Available names: {names!r}."
+    assert "... and" not in str(error)
+
+
+def test_sap_api_error_message_formats_hint_conditionally() -> None:
+    without_hint = SapApiError("File.Save", ("model.sdb",), 7)
+    with_hint = SapApiError("File.Save", ("model.sdb",), 7, hint="Use client.raw_model.")
+
+    assert str(without_hint) == (
+        "OAPI call 'File.Save' returned non-zero status 7. "
+        "Arguments: ('model.sdb',)"
+    )
+    assert str(with_hint) == (
+        "OAPI call 'File.Save' returned non-zero status 7. "
+        "Arguments: ('model.sdb',)\n"
+        "Use client.raw_model."
+    )

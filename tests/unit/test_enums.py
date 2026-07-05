@@ -4,7 +4,17 @@ from __future__ import annotations
 
 import pytest
 
-from sap2000py.enums import DOF, DofSpec, ItemType, Units, dof_mask, to_dof_mask
+from sap2000py.enums import (
+    DOF,
+    DofSpec,
+    ItemType,
+    ItemTypeElm,
+    LoadPatternType,
+    MatType,
+    Units,
+    dof_mask,
+    to_dof_mask,
+)
 
 
 def test_units_values_match_oapi_ids() -> None:
@@ -78,3 +88,23 @@ def test_item_type_values() -> None:
     assert int(ItemType.OBJECT) == 0
     assert int(ItemType.GROUP) == 1
     assert int(ItemType.SELECTED) == 2
+
+
+def test_item_type_elm_values() -> None:
+    assert int(ItemTypeElm.OBJECT_ELM) == 0
+    assert int(ItemTypeElm.ELEMENT_ELM) == 1
+    assert int(ItemTypeElm.GROUP_ELM) == 2
+    assert int(ItemTypeElm.SELECTION_ELM) == 3
+
+
+def test_mat_type_values() -> None:
+    assert int(MatType.STEEL) == 1
+    assert int(MatType.CONCRETE) == 2
+    assert int(MatType.TENDON) == 7
+    assert int(MatType.MASONRY) == 8
+
+
+def test_load_pattern_type_values() -> None:
+    assert int(LoadPatternType.DEAD) == 1
+    assert int(LoadPatternType.WIND) == 6
+    assert int(LoadPatternType.PRESTRESS) == 12
