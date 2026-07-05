@@ -2,12 +2,32 @@
 
 from __future__ import annotations
 
-from ..handles import LinkHandle, LinkPropHandle, PointHandle, as_name
+from dataclasses import dataclass
+from typing import ClassVar
+
+from ..handles import Handle
 from ._base import Manager
+from .link_props import LinkPropHandle
+from .points import PointHandle
 
 
-class Links(Manager):
+@dataclass(frozen=True, eq=False)
+class LinkHandle(Handle):
+    """A live link object reference."""
+
+    _manager_path: ClassVar[str] = "m.links"
+
+    def delete(self) -> None:
+        """Delete this link object."""
+        owner = self._require_owner()
+        owner._g.call(owner._raw.LinkObj.Delete, self.name, api_name="LinkObj.Delete")
+
+
+class Links(Manager[LinkHandle]):
     """Create and query link objects. Wraps ``cLinkObj``."""
+
+    _handle_cls = LinkHandle
+    _kind = "link"
 
     def add_by_points(
         self,
@@ -24,17 +44,20 @@ class Links(Manager):
         SAP2000 chose if ``name`` was blank or taken).
         """
         # AddByPoint(Point1, Point2, Name[in,out], IsSingleJoint, PropName, UserName)
+        point_i_ref = self._model.points._checked_ref(point_i)
+        point_j_ref = self._model.points._checked_ref(point_j)
+        prop_ref = self._model.link_props._checked_ref(prop)
         assigned = self._g.call(
             self._raw.LinkObj.AddByPoint,
-            as_name(point_i),
-            as_name(point_j),
+            point_i_ref.name,
+            point_j_ref.name,
             "",
             single_joint,
-            as_name(prop),
+            prop_ref.name,
             name,
             api_name="LinkObj.AddByPoint",
         )
-        return LinkHandle(assigned, _owner=self)
+        return self._handle(assigned)
 
     def count(self) -> int:
         """Number of link objects. Wraps ``LinkObj.Count``."""
@@ -44,7 +67,3 @@ class Links(Manager):
         """All link object names. Wraps ``LinkObj.GetNameList``."""
         _count, names = self._g.call(self._raw.LinkObj.GetNameList, api_name="LinkObj.GetNameList")
         return list(names) if names else []
-
-    def delete(self, link: LinkHandle | str) -> None:
-        """Delete a link object. Wraps ``LinkObj.Delete``."""
-        self._g.call(self._raw.LinkObj.Delete, as_name(link), api_name="LinkObj.Delete")

@@ -9,22 +9,14 @@ from __future__ import annotations
 
 import pytest
 
-from sap2000py import DOF, SapClient, Units
+from sap2000py import DOF, SapClient, Units, installations
 
 pytestmark = pytest.mark.sap
 
 
-@pytest.fixture(scope="module")
-def client():
-    c = SapClient.launch(visible=False, units=Units.KN_M_C)
-    try:
-        yield c
-    finally:
-        c.close()
-
-
 def test_launch_reports_version(client: SapClient) -> None:
     assert client.version  # non-empty version string
+    assert any(item.major == client.model.sap_version_major for item in installations())
 
 
 def test_units_roundtrip(client: SapClient) -> None:
@@ -41,8 +33,8 @@ def test_build_and_query_points(client: SapClient) -> None:
     p1 = m.points.add(0, 0, 0)
     p2 = m.points.add(0, 0, 10)
     assert m.points.count() == 2
-    assert m.points.coordinates(p2)[2] == pytest.approx(10.0)
-    m.points.set_restraints(p1, DOF.fixed())
+    assert p2.coordinates()[2] == pytest.approx(10.0)
+    p1.restrain(DOF.fixed())
 
 
 def test_native_proxy_matches_typed_layer(client: SapClient) -> None:

@@ -9,21 +9,31 @@ bridge bearing — with the nonlinear laws reachable through ``client.api.PropLi
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import ClassVar
 
-from ..handles import LinkPropHandle
+from ..enums import DofSpec, to_dof_mask
+from ..handles import Handle
 from ._base import Manager
 
 
-def _bool6(values: Sequence[bool] | None, *, default: bool) -> list[bool]:
-    if values is None:
-        return [default] * 6
-    if len(values) != 6:
-        raise ValueError(f"expected 6 elements [U1..R3], got {len(values)}.")
-    return [bool(v) for v in values]
+@dataclass(frozen=True, eq=False)
+class LinkPropHandle(Handle):
+    """A live link property reference."""
+
+    _manager_path: ClassVar[str] = "m.link_props"
+
+    def delete(self) -> None:
+        """Delete this link property."""
+        owner = self._require_owner()
+        owner._g.call(owner._raw.PropLink.Delete, self.name, api_name="PropLink.Delete")
 
 
-class LinkProps(Manager):
+class LinkProps(Manager[LinkPropHandle]):
     """Define link properties. Wraps ``cPropLink``."""
+
+    _handle_cls = LinkPropHandle
+    _kind = "link property"
 
     def add_linear(
         self,
@@ -31,8 +41,8 @@ class LinkProps(Manager):
         stiffness: Sequence[float],
         *,
         damping: Sequence[float] | None = None,
-        dof: Sequence[bool] | None = None,
-        fixed: Sequence[bool] | None = None,
+        dof: DofSpec = None,
+        fixed: DofSpec = None,
         notes: str = "",
     ) -> LinkPropHandle:
         """Define a linear link property. Wraps ``PropLink.SetLinear``.
@@ -61,8 +71,8 @@ class LinkProps(Manager):
         self._g.call(
             self._raw.PropLink.SetLinear,
             name,
-            _bool6(dof, default=True),
-            _bool6(fixed, default=False),
+            to_dof_mask(dof, default=True),
+            to_dof_mask(fixed, default=False),
             ke,
             ce,
             0.0,
@@ -81,9 +91,3 @@ class LinkProps(Manager):
             self._raw.PropLink.GetNameList, api_name="PropLink.GetNameList"
         )
         return list(names) if names else []
-
-    def delete(self, prop: LinkPropHandle | str) -> None:
-        """Delete a link property. Wraps ``PropLink.Delete``."""
-        from ..handles import as_name
-
-        self._g.call(self._raw.PropLink.Delete, as_name(prop), api_name="PropLink.Delete")

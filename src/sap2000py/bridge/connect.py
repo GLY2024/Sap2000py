@@ -7,12 +7,11 @@ boilerplate at every cap/pier/bearing interface.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from ..enums import DOF
-from ..handles import PointHandle, as_name
+from ..enums import DofSpec, to_dof_mask
+from ..model.points import PointHandle
 
 if TYPE_CHECKING:
     from ..model import Model
@@ -40,7 +39,7 @@ def snap_connect(
     b: PointHandle | str,
     *,
     how: Connection | str = Connection.BODY,
-    dof: Sequence[bool] | None = None,
+    dof: DofSpec = None,
     name: str = "",
 ) -> str:
     """Connect joints ``a`` and ``b``; return the constraint or link name.
@@ -61,19 +60,22 @@ def snap_connect(
     creation, not after the fact.
     """
     how = Connection(how)
-    dof6 = DOF.fixed() if dof is None else list(dof)
-    label = name or f"{as_name(a)}~{as_name(b)}"
+    dof6 = to_dof_mask(dof, default=True)
+    a_ref = model.points._checked_ref(a)
+    b_ref = model.points._checked_ref(b)
+    label = name or f"{a_ref.name}~{b_ref.name}"
 
     if how is Connection.RIGID_LINK:
-        prop = f"{label}_rigid"
-        model.link_props.add_linear(prop, [_RIGID_STIFFNESS] * 6, fixed=[True] * 6)
-        link = model.links.add_by_points(a, b, prop, name=label)
+        prop = model.link_props.add_linear(
+            f"{label}_rigid", [_RIGID_STIFFNESS] * 6, fixed=[True] * 6
+        )
+        link = model.links.add_by_points(a_ref, b_ref, prop, name=label)
         return link.name
 
     if how is Connection.BODY:
         model.constraints.add_body(label, dof=dof6)
     else:  # EQUAL
         model.constraints.add_equal(label, dof=dof6)
-    model.points.set_constraint(a, label)
-    model.points.set_constraint(b, label)
+    a_ref.constrain(label)
+    b_ref.constrain(label)
     return label

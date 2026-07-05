@@ -9,6 +9,16 @@ SAP2000 instance.
       heading_level: 2
       members_order: source
 
+::: sap2000py.installations
+    options:
+      show_root_heading: true
+      heading_level: 2
+
+::: sap2000py.Installation
+    options:
+      show_root_heading: true
+      heading_level: 2
+
 ::: sap2000py.ErrorPolicy
     options:
       show_root_heading: true

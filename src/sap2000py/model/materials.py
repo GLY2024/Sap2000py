@@ -8,15 +8,18 @@ with the exact SAP2000 grade string.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import ClassVar
+
 from ..enums import MatType
-from ..handles import MaterialHandle, as_name
+from ..handles import Handle
 from ._base import Manager
 
 # SAP2000 grade-string conventions, ported from the legacy China material set.
 _CONCRETE_GRADE = {
     "GB": "GB 50010 {g}",
     "JTG": "JTG D62-2004 {g}",
-    "TB": "TB 10092-2017 {g}",
+    "TB": "TB10002.3 {g}",
 }
 _STEEL_GRADE = {
     "GB": "{g}",  # e.g. "Q345"
@@ -24,11 +27,35 @@ _STEEL_GRADE = {
 }
 
 
-class Materials(Manager):
+@dataclass(frozen=True, eq=False)
+class MaterialHandle(Handle):
+    """A live material property reference."""
+
+    _manager_path: ClassVar[str] = "m.materials"
+
+    def set_weight_per_volume(self, value: float) -> MaterialHandle:
+        """Set weight per unit volume and return ``self`` for chaining."""
+        owner = self._require_owner()
+        owner._g.call(
+            owner._raw.PropMaterial.SetWeightAndMass,
+            self.name,
+            1,
+            float(value),
+            api_name="PropMaterial.SetWeightAndMass",
+        )
+        return self
+
+    def delete(self) -> None:
+        """Delete this material property."""
+        owner = self._require_owner()
+        owner._g.call(owner._raw.PropMaterial.Delete, self.name, api_name="PropMaterial.Delete")
+
+
+class Materials(Manager[MaterialHandle]):
     """Define and query material properties. Wraps ``cPropMaterial``."""
 
-    def _handle(self, name: str) -> MaterialHandle:
-        return MaterialHandle(name, _owner=self)
+    _handle_cls = MaterialHandle
+    _kind = "material"
 
     def add(
         self,
@@ -125,16 +152,6 @@ class Materials(Manager):
                 api_name="PropMaterial.SetWeightAndMass",
             )
         return self._handle(name)
-
-    def set_weight_per_volume(self, material: MaterialHandle | str, weight: float) -> None:
-        """Set a material's weight per unit volume. Wraps ``SetWeightAndMass``."""
-        self._g.call(
-            self._raw.PropMaterial.SetWeightAndMass,
-            as_name(material),
-            1,
-            float(weight),
-            api_name="PropMaterial.SetWeightAndMass",
-        )
 
     def names(self) -> list[str]:
         """All material names. Wraps ``PropMaterial.GetNameList``."""

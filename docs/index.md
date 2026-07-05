@@ -15,6 +15,11 @@ OAPI into a typed, explicit, well-behaved Python library.
   return code and raises a typed exception — no more silent failures.
 - **A typed everyday API.** `client.model.points.add(0, 0, 0)` with handles,
   enums, and units context managers.
+- **Live object handles.** `p.restrain(...)` and `col.forces()` read or mutate
+  the named SAP2000 object immediately, without cached Python state.
+- **Version-aware launch.** `SapClient.launch(version="25")` discovers local
+  installations and verifies the connected SAP2000 major version before model
+  initialization.
 - **A full escape hatch.** Anything not yet wrapped is reachable through
   `client.api.<Object>.<Method>(...)` with the same error handling.
 - **Engineering modules.** Section geometry, fiber moment-curvature, yield

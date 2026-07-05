@@ -5,10 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..enums import Units
+from ..handles import Handle
 from ._base import Manager
 
 
-class Files(Manager):
+class Files(Manager[Handle]):
     """Create, open and save SAP2000 models. Wraps ``cFile``."""
 
     def new_blank(self, *, units: Units | None = None) -> None:

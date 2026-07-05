@@ -77,7 +77,7 @@ testpaths = ["tests"]
 markers = [
   "sap: integration tests that require a real local SAP2000 installation (run with --sap)",
 ]
-addopts = "-ra"
+addopts = "--import-mode=importlib -ra"
 
 [tool.ruff]
 line-length = 100

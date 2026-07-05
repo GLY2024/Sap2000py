@@ -62,6 +62,8 @@ from loguru import logger
 
 from .errors import SapApiError, SapComError
 
+__all__ = ["COMError", "ComGateway", "ErrorPolicy"]
+
 try:  # comtypes is Windows-only; keep the module importable elsewhere.
     from comtypes import COMError
 except ImportError:  # pragma: no cover - exercised only off-Windows

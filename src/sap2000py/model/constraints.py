@@ -1,35 +1,26 @@
 """Joint constraints (Body / Equal) that tie degrees of freedom together.
 
 A *constraint* is a named definition (e.g. a rigid Body link); points are then
-assigned to it with :meth:`~sap2000py.model.points.Points.set_constraint`. This
+assigned to it with :meth:`~sap2000py.model.points.PointHandle.constrain`. This
 is how the bridge layer's ``snap_connect`` rigidly joins coincident nodes (cap
 to pier, pier-top to bearing-bottom) without modelling stiff link elements.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-
-from ..enums import DOF
+from ..enums import DofSpec, to_dof_mask
+from ..handles import Handle
 from ._base import Manager
 
 
-def _dof6(dof: Sequence[bool] | None) -> list[bool]:
-    if dof is None:
-        return DOF.fixed()
-    if len(dof) != 6:
-        raise ValueError(f"dof must have 6 elements [U1..R3], got {len(dof)}.")
-    return [bool(b) for b in dof]
-
-
-class Constraints(Manager):
+class Constraints(Manager[Handle]):
     """Define joint constraints. Wraps ``cConstraintDef``."""
 
     def add_body(
         self,
         name: str,
         *,
-        dof: Sequence[bool] | None = None,
+        dof: DofSpec = None,
         csys: str = "Global",
     ) -> str:
         """Define a Body constraint (rigid body). Wraps ``ConstraintDef.SetBody``.
@@ -41,7 +32,7 @@ class Constraints(Manager):
         self._g.call(
             self._raw.ConstraintDef.SetBody,
             name,
-            _dof6(dof),
+            to_dof_mask(dof, default=True),
             csys,
             api_name="ConstraintDef.SetBody",
         )
@@ -51,7 +42,7 @@ class Constraints(Manager):
         self,
         name: str,
         *,
-        dof: Sequence[bool] | None = None,
+        dof: DofSpec = None,
         csys: str = "Global",
     ) -> str:
         """Define an Equal constraint. Wraps ``ConstraintDef.SetEqual``.
@@ -64,7 +55,7 @@ class Constraints(Manager):
         self._g.call(
             self._raw.ConstraintDef.SetEqual,
             name,
-            _dof6(dof),
+            to_dof_mask(dof, default=True),
             csys,
             api_name="ConstraintDef.SetEqual",
         )

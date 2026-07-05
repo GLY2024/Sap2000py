@@ -16,41 +16,56 @@ Other ways to connect:
 ```python
 client = SapClient.attach()             # an already-running instance (raises if none)
 client = SapClient.attach_or_launch()   # attach, else launch
+client = SapClient.attach_or_launch(version="25")  # attach matching version, else raise
 ```
 
 When you launch, you own the process — `close()` (or the `with` block) exits
 SAP2000. When you `attach`, you don't — closing just drops the connection.
+Pass `launch_on_version_mismatch=True` only when you explicitly want a new
+process if the running SAP2000 major version does not match `version=`.
 
 ## Build a tiny model
 
 ```python
-from sap2000py import SapClient, Units, DOF
+from sap2000py import SapClient, Units
 
 with SapClient.launch(visible=False) as client:
     m = client.model
     m.files.new_blank(units=Units.KN_M_C)
 
     # A column from the ground up.
+    mat = m.materials.add_concrete("C40", code="JTG")
+    sec = m.frame_sections.add_rectangle("COL", material=mat, depth=0.4, width=0.4)
+
     base = m.points.add(0, 0, 0)
     top = m.points.add(0, 0, 10)
-    m.points.set_restraints(base, DOF.fixed())
+    base.fix()
+    col = m.frames.add_by_points(base, top, section=sec)
 
     print("points:", m.points.count())
-    print("top z:", m.points.coordinates(top)[2])
+    print("frames:", m.frames.count())
+    print("top z:", top.coordinates()[2])
+    print("column length:", col.length)
 
     m.files.save(r"C:\tmp\column.sdb")
 ```
 
-## Handles or names
+## Live handles
 
-Object creators return a typed handle that stringifies to its name. Anywhere an
-object is expected, a handle or a raw name string both work:
+Object creators return a live handle: a typed reference to an object in SAP2000
+by name. It stores no model state, and each method round-trips to SAP2000:
 
 ```python
-p = m.points.add(1, 2, 3)     # PointHandle("P1")
-m.points.set_restraints(p, DOF.pinned())
-m.points.set_restraints("P1", DOF.pinned())   # equivalent
+p = m.points.add(1, 2, 3)     # handle.name is assigned by SAP2000
+p.pin()                       # fix() / pin() / free() for the common supports
+m.points.ref("P1").pin()      # bind a raw name to this model
+p.restrain("U1", "R3")        # or name exactly which DOF to restrain
 ```
+
+For result extraction, single-object handle methods are immediate and read the
+current output selection. Use `m.results.batch(...).collect()` when you want to
+select cases once and read many objects, groups, or the current SAP2000
+selection.
 
 ## Reach the rest of the OAPI
 

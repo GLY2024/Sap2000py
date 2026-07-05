@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from ..errors import MissingDependencyError
-from ..handles import FrameSectionHandle
+from ..model.frame_sections import FrameSectionHandle
 from .components.bearing import Bearing
 from .components.foundation import Foundation
 from .components.girder import Girder

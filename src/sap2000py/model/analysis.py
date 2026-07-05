@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from ..errors import SapAnalysisError, SapError
+from ..handles import Handle
 from ._base import Manager
 
 # SAP2000 case-status codes from Analyze.GetCaseStatus.
@@ -24,7 +25,7 @@ class AnalysisReport:
         return all(s == "finished" for s in self.status.values())
 
 
-class Analysis(Manager):
+class Analysis(Manager[Handle]):
     """Control and run the analysis. Wraps ``cAnalyze``."""
 
     def set_run_flags(self, cases: Sequence[str] | None = None, *, run: bool = True) -> None:

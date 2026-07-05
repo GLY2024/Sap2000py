@@ -9,10 +9,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from ..enums import LoadPatternType
+from ..handles import Handle
 from ._base import Manager
 
 
-class LoadPatterns(Manager):
+class LoadPatterns(Manager[Handle]):
     """Define load patterns. Wraps ``cLoadPatterns``. Reached as ``model.loads.patterns``."""
 
     def add(
@@ -61,7 +62,7 @@ class LoadPatterns(Manager):
         return list(names) if names else []
 
 
-class LoadCases(Manager):
+class LoadCases(Manager[Handle]):
     """Define load cases. Wraps ``cLoadCases``. Reached as ``model.loads.cases``."""
 
     def add_static_linear(self, name: str, *, loads: Mapping[str, float] | None = None) -> str:
@@ -130,7 +131,7 @@ class LoadCases(Manager):
         return list(names) if names else []
 
 
-class Loads(Manager):
+class Loads(Manager[Handle]):
     """Groups the load-pattern and load-case managers under ``model.loads``."""
 
     def __init__(self, model) -> None:  # type: ignore[no-untyped-def]

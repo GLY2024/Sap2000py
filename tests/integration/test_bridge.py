@@ -22,15 +22,6 @@ from sap2000py.bridge import (
 pytestmark = pytest.mark.sap
 
 
-@pytest.fixture(scope="module")
-def client():
-    c = SapClient.launch(visible=False, units=Units.KN_M_C)
-    try:
-        yield c
-    finally:
-        c.close()
-
-
 def _define_sections(m) -> None:
     """A C40 concrete deck and pier section in a blank model."""
     m.files.new_blank(units=Units.KN_M_C)

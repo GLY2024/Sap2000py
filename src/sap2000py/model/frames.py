@@ -2,24 +2,155 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from dataclasses import dataclass
+from math import dist
+from typing import Any, ClassVar
 
-from ..enums import ItemType
-from ..handles import (
-    FrameHandle,
-    FrameSectionHandle,
-    GroupHandle,
-    PointHandle,
-    as_name,
-)
+from ..enums import DofSpec, ItemType, to_dof_mask
+from ..handles import Handle
 from ._base import Manager
+from ._compat import frame_output_stations_args
+from .frame_sections import FrameSectionHandle
+from .groups import GroupHandle
+from .points import PointHandle
 
 
-class Frames(Manager):
+@dataclass(frozen=True, eq=False)
+class FrameHandle(Handle):
+    """A live frame object reference."""
+
+    _manager_path: ClassVar[str] = "m.frames"
+
+    def release(self, *, i_end: DofSpec = None, j_end: DofSpec = None) -> FrameHandle:
+        """Write the complete release state at both ends and return ``self``.
+
+        Omitted ends are written as fully unreleased, so this overwrites any
+        previous release state rather than preserving it.
+        """
+        owner = self._require_owner()
+        zeros = [0.0] * 6
+        owner._g.call(
+            owner._raw.FrameObj.SetReleases,
+            self.name,
+            to_dof_mask(i_end, default=False),
+            to_dof_mask(j_end, default=False),
+            zeros,
+            zeros,
+            int(ItemType.OBJECT),
+            api_name="FrameObj.SetReleases",
+        )
+        return self
+
+    def assign_section(self, section: FrameSectionHandle | str) -> FrameHandle:
+        """Assign a frame section and return ``self``."""
+        owner = self._require_owner()
+        section_ref = owner._model.frame_sections.ref(section)
+        owner._g.call(
+            owner._raw.FrameObj.SetSection,
+            self.name,
+            section_ref.name,
+            int(ItemType.OBJECT),
+            api_name="FrameObj.SetSection",
+        )
+        return self
+
+    def rotate(self, angle: float) -> FrameHandle:
+        """Set the local-axis rotation angle in degrees and return ``self``."""
+        owner = self._require_owner()
+        owner._g.call(
+            owner._raw.FrameObj.SetLocalAxes,
+            self.name,
+            float(angle),
+            int(ItemType.OBJECT),
+            api_name="FrameObj.SetLocalAxes",
+        )
+        return self
+
+    def set_output_stations(
+        self,
+        *,
+        min_stations: int | None = None,
+        max_segment_size: float | None = None,
+    ) -> FrameHandle:
+        """Set output stations by count or by max segment size and return ``self``."""
+        if (min_stations is None) == (max_segment_size is None):
+            raise ValueError("provide exactly one of min_stations or max_segment_size.")
+        if min_stations is not None:
+            my_type, max_seg, min_sec = 2, 0.0, int(min_stations)
+        else:
+            my_type, max_seg, min_sec = 1, float(max_segment_size), 2  # type: ignore[arg-type]
+        owner = self._require_owner()
+        args = frame_output_stations_args(
+            owner._model.sap_version_major,
+            my_type=my_type,
+            max_seg=max_seg,
+            min_sec=min_sec,
+            no_ends=False,
+            no_ptloads=False,
+            item_type=int(ItemType.OBJECT),
+        )
+        owner._g.call(
+            owner._raw.FrameObj.SetOutputStations,
+            self.name,
+            *args,
+            api_name="FrameObj.SetOutputStations",
+        )
+        return self
+
+    def group(self, group: GroupHandle | str, *, remove: bool = False) -> FrameHandle:
+        """Add or remove this frame from a group and return ``self``."""
+        owner = self._require_owner()
+        group_ref = owner._model.groups.ref(group)
+        owner._g.call(
+            owner._raw.FrameObj.SetGroupAssign,
+            self.name,
+            group_ref.name,
+            remove,
+            int(ItemType.OBJECT),
+            api_name="FrameObj.SetGroupAssign",
+        )
+        return self
+
+    @property
+    def length(self) -> float:
+        """Straight-line end-to-end length in the current model length unit.
+
+        Each access queries SAP2000 for the frame endpoints and point
+        coordinates; the value is not cached.
+        """
+        owner = self._require_owner()
+        i_name, j_name = owner._g.call(
+            owner._raw.FrameObj.GetPoints,
+            self.name,
+            "",
+            "",
+            api_name="FrameObj.GetPoints",
+        )
+        i = owner._model.points.ref(i_name).coordinates()
+        j = owner._model.points.ref(j_name).coordinates()
+        return float(dist(i, j))
+
+    def forces(self) -> Any:
+        """Frame forces for the currently selected output cases/combos."""
+        owner = self._require_owner()
+        return owner._model.results.frame_forces(self)
+
+    def delete(self) -> None:
+        """Delete this frame object."""
+        owner = self._require_owner()
+        owner._g.call(
+            owner._raw.FrameObj.Delete,
+            self.name,
+            int(ItemType.OBJECT),
+            api_name="FrameObj.Delete",
+        )
+
+
+class Frames(Manager[FrameHandle]):
     """Create and manipulate frame objects. Wraps ``cFrameObj``."""
 
-    def _handle(self, name: str) -> FrameHandle:
-        return FrameHandle(name, _owner=self)
+    _handle_cls = FrameHandle
+    _kind = "frame"
 
     def add_by_points(
         self,
@@ -30,12 +161,15 @@ class Frames(Manager):
         name: str = "",
     ) -> FrameHandle:
         """Add a frame between two existing points. Wraps ``FrameObj.AddByPoint``."""
+        i_ref = self._model.points._checked_ref(i)
+        j_ref = self._model.points._checked_ref(j)
+        section_ref = self._model.frame_sections._checked_ref(section)
         assigned = self._g.call(
             self._raw.FrameObj.AddByPoint,
-            as_name(i),
-            as_name(j),
+            i_ref.name,
+            j_ref.name,
             "",
-            as_name(section),
+            section_ref.name,
             name,
             api_name="FrameObj.AddByPoint",
         )
@@ -53,6 +187,7 @@ class Frames(Manager):
         """Add a frame between two coordinates. Wraps ``FrameObj.AddByCoord``."""
         xi, yi, zi = start
         xj, yj, zj = end
+        section_ref = self._model.frame_sections._checked_ref(section)
         assigned = self._g.call(
             self._raw.FrameObj.AddByCoord,
             float(xi),
@@ -62,122 +197,12 @@ class Frames(Manager):
             float(yj),
             float(zj),
             "",
-            as_name(section),
+            section_ref.name,
             name,
             csys,
             api_name="FrameObj.AddByCoord",
         )
         return self._handle(assigned)
-
-    def set_section(
-        self,
-        frame: FrameHandle | str,
-        section: FrameSectionHandle | str,
-        *,
-        item_type: ItemType = ItemType.OBJECT,
-    ) -> None:
-        """Assign a section property to a frame. Wraps ``FrameObj.SetSection``."""
-        self._g.call(
-            self._raw.FrameObj.SetSection,
-            as_name(frame),
-            as_name(section),
-            int(item_type),
-            api_name="FrameObj.SetSection",
-        )
-
-    def set_releases(
-        self,
-        frame: FrameHandle | str,
-        *,
-        i_end: Sequence[bool],
-        j_end: Sequence[bool],
-        item_type: ItemType = ItemType.OBJECT,
-    ) -> None:
-        """Release DOF at the frame ends (no partial fixity).
-
-        ``i_end``/``j_end`` are 6-element ``[U1..R3]`` masks; ``True`` releases
-        that DOF. Wraps ``FrameObj.SetReleases``.
-        """
-        if len(i_end) != 6 or len(j_end) != 6:
-            raise ValueError("i_end and j_end must each have 6 elements [U1..R3].")
-        zeros = [0.0] * 6
-        self._g.call(
-            self._raw.FrameObj.SetReleases,
-            as_name(frame),
-            list(i_end),
-            list(j_end),
-            zeros,
-            zeros,
-            int(item_type),
-            api_name="FrameObj.SetReleases",
-        )
-
-    def set_local_axes(
-        self,
-        frame: FrameHandle | str,
-        angle: float,
-        *,
-        item_type: ItemType = ItemType.OBJECT,
-    ) -> None:
-        """Set the local-axis rotation angle (degrees). Wraps ``FrameObj.SetLocalAxes``."""
-        self._g.call(
-            self._raw.FrameObj.SetLocalAxes,
-            as_name(frame),
-            float(angle),
-            int(item_type),
-            api_name="FrameObj.SetLocalAxes",
-        )
-
-    def set_output_stations(
-        self,
-        frame: FrameHandle | str,
-        *,
-        min_stations: int | None = None,
-        max_segment_size: float | None = None,
-        item_type: ItemType = ItemType.OBJECT,
-    ) -> None:
-        """Set output stations by count or by max segment size.
-
-        Provide exactly one of ``min_stations`` or ``max_segment_size``. Wraps
-        ``FrameObj.SetOutputStations`` (myType 1 = max size, 2 = min number).
-        """
-        if (min_stations is None) == (max_segment_size is None):
-            raise ValueError("provide exactly one of min_stations or max_segment_size.")
-        if min_stations is not None:
-            my_type, max_seg, min_sec = 2, 0.0, int(min_stations)
-        else:
-            my_type, max_seg, min_sec = 1, float(max_segment_size), 2  # type: ignore[arg-type]
-        # SetOutputStations(Name, MyType, MaxSegSize, MinSections, NoOutAtEnds,
-        #                   NoOutAtPointLoads, ItemType)
-        self._g.call(
-            self._raw.FrameObj.SetOutputStations,
-            as_name(frame),
-            my_type,
-            max_seg,
-            min_sec,
-            False,
-            False,
-            int(item_type),
-            api_name="FrameObj.SetOutputStations",
-        )
-
-    def add_to_group(
-        self,
-        frame: FrameHandle | str,
-        group: GroupHandle | str,
-        *,
-        remove: bool = False,
-        item_type: ItemType = ItemType.OBJECT,
-    ) -> None:
-        """Add (or remove) a frame from a group. Wraps ``FrameObj.SetGroupAssign``."""
-        self._g.call(
-            self._raw.FrameObj.SetGroupAssign,
-            as_name(frame),
-            as_name(group),
-            remove,
-            int(item_type),
-            api_name="FrameObj.SetGroupAssign",
-        )
 
     def count(self) -> int:
         """Number of frame objects. Wraps ``FrameObj.Count``."""

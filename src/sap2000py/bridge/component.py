@@ -13,7 +13,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from ..handles import PointHandle
+from ..model.points import PointHandle
 
 if TYPE_CHECKING:
     from ..model import Model

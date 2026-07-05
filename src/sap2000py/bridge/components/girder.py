@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from ...handles import FrameSectionHandle
+from ...model.frame_sections import FrameSectionHandle
 from ..component import BridgeComponent
 
 if TYPE_CHECKING:
