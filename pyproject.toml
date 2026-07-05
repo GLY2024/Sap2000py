@@ -54,7 +54,7 @@ plot = ["matplotlib>=3.7"]
 # Parametric optimization backends.
 optimize = ["scipy>=1.10"]
 all = ["sap2000py[sections,fiber,bridge,tables,plot,optimize]"]
-# Documentation site (also used by Read the Docs and the GitHub Pages workflow).
+# Documentation site (used by the GitHub Pages workflow).
 docs = ["mkdocs-material>=9.5", "mkdocstrings[python]>=0.26"]
 
 [dependency-groups]
