@@ -60,8 +60,10 @@ def test_unmanaged_handle_subclasses_keep_base_equality_and_hash(handle_cls) -> 
 
     assert handle_cls("H1", _owner=owner_a) == bound_a
     assert bound_a != bound_b
-    assert hash(bound_a) == hash((handle_cls, "H1"))
+    assert hash(bound_a) == hash(handle_cls("H1", _owner=owner_a))
     assert hash(bound_a) == hash(bound_b)
+    assert hash(bound_a) != hash(handle_cls("H2", _owner=owner_a))
+    assert hash(PointHandle("H1")) != hash(handle_cls("H1"))
 
 
 def test_as_name_accepts_handle_or_str() -> None:

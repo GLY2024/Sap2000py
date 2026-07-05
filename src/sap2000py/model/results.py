@@ -264,11 +264,10 @@ class ResultBatch:
     def collect(self) -> dict[str, ResultTable]:
         """Execute all registered reads and return tables by key."""
         restore_selection: tuple[tuple[str, ...], tuple[str, ...]] | None = None
-        if self._cases is not None or self._combos is not None:
-            restore_selection = self._results._selected_output()
-            self._results.select_output(cases=self._cases, combos=self._combos)
-
         try:
+            if self._cases is not None or self._combos is not None:
+                restore_selection = self._results._selected_output()
+                self._results.select_output(cases=self._cases, combos=self._combos)
             return self._collect_requests()
         finally:
             if restore_selection is not None:
@@ -342,11 +341,15 @@ class ResultBatch:
         *,
         column: _ResultObjectColumn,
     ) -> None:
-        if target.item_type is not ItemTypeElm.OBJECT_ELM:
+        if target.item_type is ItemTypeElm.SELECTION_ELM:
             return
-        returned = {str(name) for name in table[column]}
-        if target.name not in returned:
-            raise ValueError(f"result batch returned no {column} rows for target {target.name!r}.")
+        if target.item_type is ItemTypeElm.GROUP_ELM:
+            if len(table) == 0:
+                raise ValueError(
+                    f"result batch returned no {column} rows for group target {target.name!r}."
+                )
+            return
+        self._ensure_targets_rows(table, [target], column=column)
 
     def _collect_frame_temp_group(self, targets: Sequence[_Target]) -> ResultTable:
         group_name = f"__sap2000py_results_{uuid4().hex}"

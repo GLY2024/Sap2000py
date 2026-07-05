@@ -29,14 +29,9 @@ class Handle:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Handle) or other.__class__ is not self.__class__:
             return NotImplemented
-        other_handle = other
-        if (
-            self._owner is not None
-            and other_handle._owner is not None
-            and self._owner is not other_handle._owner
-        ):
+        if self._owner is not None and other._owner is not None and self._owner is not other._owner:
             return False
-        return self.name == other_handle.name
+        return self.name == other.name
 
     def __hash__(self) -> int:
         return hash((type(self), self.name))

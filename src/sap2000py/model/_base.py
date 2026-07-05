@@ -33,24 +33,26 @@ class Manager(Generic[H]):
     def _raw(self) -> Any:
         return self._g.model
 
-    def _handle(self, name: str) -> H:
-        if self._handle_cls is None:
+    def _require_handle_cls(self) -> type[H]:
+        handle_cls = self._handle_cls
+        if handle_cls is None:
             raise TypeError(f"{type(self).__name__} does not define a handle class.")
-        return self._handle_cls(name, _owner=self)
+        return handle_cls
+
+    def _handle(self, name: str) -> H:
+        return self._require_handle_cls()(name, _owner=self)
 
     def names(self) -> list[str]:
         raise NotImplementedError
 
     def all(self) -> list[H]:
         """Return live handles for all names known to this manager."""
-        if self._handle_cls is None:
-            raise TypeError(f"{type(self).__name__} does not define a handle class.")
+        self._require_handle_cls()
         return [self._handle(name) for name in self.names()]
 
     def get(self, name: str) -> H:
         """Return a live handle after validating that ``name`` exists."""
-        if self._handle_cls is None:
-            raise TypeError(f"{type(self).__name__} does not define a handle class.")
+        self._require_handle_cls()
         available = self.names()
         if name not in available:
             raise SapNameNotFoundError(name, kind=self._kind, available=available)
@@ -65,16 +67,13 @@ class Manager(Generic[H]):
         Raw strings stay unchecked for internal known-good references. Unbound
         typed handles are validated before binding to this manager.
         """
-        if self._handle_cls is None:
-            raise TypeError(f"{type(self).__name__} does not define a handle class.")
+        handle_cls = self._require_handle_cls()
         if isinstance(obj, str):
             return self._handle(obj)
         if not isinstance(obj, Handle):
-            raise TypeError(
-                f"expected {self._handle_cls.__name__} or str, got {type(obj).__name__}."
-            )
-        if not isinstance(obj, self._handle_cls):
-            raise TypeError(f"expected {self._handle_cls.__name__}, got {type(obj).__name__}.")
+            raise TypeError(f"expected {handle_cls.__name__} or str, got {type(obj).__name__}.")
+        if not isinstance(obj, handle_cls):
+            raise TypeError(f"expected {handle_cls.__name__}, got {type(obj).__name__}.")
         if obj._owner is self:
             return obj
         if obj._owner is None:

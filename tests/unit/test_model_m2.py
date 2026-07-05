@@ -724,7 +724,7 @@ def _joint_react_result(point: str = "P1"):
     )
 
 
-def _joint_react_result_many(*points: str):
+def _joint_result_many(*points: str):
     count = len(points)
     return (
         count,
@@ -757,25 +757,6 @@ def _joint_displ_result(point: str = "P1"):
         (4.0,),
         (5.0,),
         (6.0,),
-        0,
-    )
-
-
-def _joint_displ_result_many(*points: str):
-    count = len(points)
-    return (
-        count,
-        tuple(points),
-        ("E1",) * count,
-        ("DEAD",) * count,
-        ("Step",) * count,
-        (0.0,) * count,
-        (1.0,) * count,
-        (2.0,) * count,
-        (3.0,) * count,
-        (4.0,) * count,
-        (5.0,) * count,
-        (6.0,) * count,
         0,
     )
 
@@ -877,6 +858,20 @@ def test_result_batch_group_is_lazy_and_does_not_select_when_cases_omitted(make_
     assert h.called("Results.FrameForce") == [("G1", int(ItemTypeElm.GROUP_ELM))]
 
 
+def test_result_batch_group_target_rejects_empty_result_table(make_model) -> None:
+    h = make_model(
+        {
+            "GroupDef.GetNameList": (1, ("empty",), 0),
+            "Results.JointReact": _joint_result_many(),
+        }
+    )
+
+    with pytest.raises(ValueError, match="group target 'empty'"):
+        h.model.results.batch().joint_reactions(group="empty", key="reactions").collect()
+
+    assert h.called("Results.JointReact") == [("empty", int(ItemTypeElm.GROUP_ELM))]
+
+
 def test_result_batch_temporarily_selects_output_when_cases_are_given(make_model) -> None:
     h = make_model(
         {
@@ -947,6 +942,48 @@ def test_result_batch_restores_selected_output_between_batches_and_single_read(m
 
     single = h.model.frames.ref("F1").forces()
     assert single["case"] == ("BASE",)
+
+
+def test_result_batch_restores_selected_output_when_temporary_selection_fails(make_model) -> None:
+    selected_cases = {"BASE"}
+
+    def deselect_output() -> int:
+        selected_cases.clear()
+        return 0
+
+    def set_case_output(case: str, selected: bool) -> int:
+        if selected and case == "LIVE":
+            return 7
+        if selected:
+            selected_cases.add(case)
+        else:
+            selected_cases.discard(case)
+        return 0
+
+    def get_case_output(case: str, _selected: bool) -> tuple[bool, int]:
+        return case in selected_cases, 0
+
+    h = make_model(
+        {
+            "LoadCases.GetNameList": (3, ("BASE", "DEAD", "LIVE"), 0),
+            "Results.Setup.GetCaseSelectedForOutput": get_case_output,
+            "RespCombo.GetNameList": (0, (), 0),
+            "Results.Setup.DeselectAllCasesAndCombosForOutput": deselect_output,
+            "Results.Setup.SetCaseSelectedForOutput": set_case_output,
+        }
+    )
+
+    with pytest.raises(SapApiError, match="SetCaseSelectedForOutput"):
+        h.model.results.batch(cases=["DEAD", "LIVE"]).modal_periods().collect()
+
+    assert selected_cases == {"BASE"}
+    assert h.called("Results.Setup.DeselectAllCasesAndCombosForOutput") == [(), ()]
+    assert h.called("Results.Setup.SetCaseSelectedForOutput") == [
+        ("DEAD", True),
+        ("LIVE", True),
+        ("BASE", True),
+    ]
+    assert h.called("Results.ModalPeriod") == []
 
 
 def test_result_batch_modal_periods_uses_default_key_and_combo_selection(make_model) -> None:
@@ -1158,7 +1195,7 @@ def test_result_batch_point_reactions_temporary_group_is_explicit_opt_in(make_mo
             "GroupDef.SetGroup": 0,
             "PointObj.SetGroupAssign": 0,
             "GroupDef.Delete": 0,
-            "Results.JointReact": lambda _name, _item_type: _joint_react_result_many("P1", "P2"),
+            "Results.JointReact": lambda _name, _item_type: _joint_result_many("P1", "P2"),
         }
     )
 
@@ -1187,7 +1224,7 @@ def test_result_batch_points_temporary_group_is_explicit_opt_in(make_model) -> N
             "GroupDef.SetGroup": 0,
             "PointObj.SetGroupAssign": 0,
             "GroupDef.Delete": 0,
-            "Results.JointDispl": lambda _name, _item_type: _joint_displ_result_many("P1", "P2"),
+            "Results.JointDispl": lambda _name, _item_type: _joint_result_many("P1", "P2"),
         }
     )
 
