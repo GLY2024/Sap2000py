@@ -28,6 +28,16 @@ system assemblers. See the [bridge guide](../guides/bridge.md) for an overview.
       show_root_heading: true
       heading_level: 3
 
+::: sap2000py.bridge.components.isolators.LeadRubberBearing
+    options:
+      show_root_heading: true
+      heading_level: 3
+
+::: sap2000py.bridge.components.isolators.FrictionPendulumBearing
+    options:
+      show_root_heading: true
+      heading_level: 3
+
 ::: sap2000py.bridge.components.girder.Girder
     options:
       show_root_heading: true

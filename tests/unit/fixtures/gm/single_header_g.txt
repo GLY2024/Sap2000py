@@ -1,0 +1,8 @@
+# synthetic single-column record
+NPTS=4
+DT=0.10
+unit: g
+0.00
+0.05
+-0.10
+0.20

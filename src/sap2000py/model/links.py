@@ -7,6 +7,7 @@ from typing import ClassVar
 
 from ..handles import Handle
 from ._base import Manager
+from .groups import GroupHandle
 from .link_props import LinkPropHandle
 from .points import PointHandle
 
@@ -21,6 +22,19 @@ class LinkHandle(Handle):
         """Delete this link object."""
         owner = self._require_owner()
         owner._g.call(owner._raw.LinkObj.Delete, self.name, api_name="LinkObj.Delete")
+
+    def group(self, group: GroupHandle | str, *, remove: bool = False) -> LinkHandle:
+        """Assign this link to a group. Wraps ``LinkObj.SetGroupAssign``."""
+        owner = self._require_owner()
+        group_ref = owner._model.groups.ref(group)
+        owner._g.call(
+            owner._raw.LinkObj.SetGroupAssign,
+            self.name,
+            group_ref.name,
+            remove,
+            api_name="LinkObj.SetGroupAssign",
+        )
+        return self
 
 
 class Links(Manager[LinkHandle]):

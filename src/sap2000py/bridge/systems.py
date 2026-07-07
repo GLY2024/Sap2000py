@@ -2,22 +2,27 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import accumulate
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from ..errors import MissingDependencyError
 from ..model.frame_sections import FrameSectionHandle
+from .component import BridgeComponent
 from .components.bearing import Bearing
 from .components.foundation import Foundation
 from .components.girder import Girder
+from .components.isolators import FrictionPendulumBearing, LeadRubberBearing
 from .components.pier import Pier
 from .connect import Connection, snap_connect
+from .presets import _bearing_table
 
 if TYPE_CHECKING:
     from ..model import Model
+
+_BearingMaker = Callable[[str, float, float, float], BridgeComponent]
 
 
 @dataclass(frozen=True)
@@ -26,7 +31,7 @@ class BridgeBuild:
 
     foundations: list[Foundation]
     piers: list[Pier]
-    bearings: list[Bearing]
+    bearings: list[BridgeComponent]
     girder: Girder
     connections: list[str]
 
@@ -52,8 +57,9 @@ class ContinuousGirderBridge:
         pier_height: float,
         girder_section: FrameSectionHandle | str,
         pier_section: FrameSectionHandle | str,
-        bearing_stiffness: Sequence[float],
+        bearing_stiffness: Sequence[float] | None = None,
         bearing_height: float = 0.0,
+        bearing_maker: _BearingMaker | None = None,
         pier_segments: int = 1,
         foundation: Literal["fixed", "spring"] = "fixed",
         foundation_stiffness: Sequence[float] | None = None,
@@ -68,8 +74,11 @@ class ContinuousGirderBridge:
         self.pier_height = float(pier_height)
         self.girder_section = girder_section
         self.pier_section = pier_section
+        if bearing_stiffness is None and bearing_maker is None:
+            raise ValueError("bearing_stiffness is required when bearing_maker is not provided.")
         self.bearing_stiffness = bearing_stiffness
         self.bearing_height = float(bearing_height)
+        self.bearing_maker = bearing_maker
         self.pier_segments = int(pier_segments)
         self.foundation = foundation
         self.foundation_stiffness = foundation_stiffness
@@ -94,6 +103,14 @@ class ContinuousGirderBridge:
         path = Path(path)
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         data.setdefault("name", path.stem)
+        bearing_config = data.pop("bearing", None)
+        if bearing_config is not None:
+            maker, stiffness, height = _bearing_from_yaml(bearing_config)
+            if stiffness is not None:
+                data["bearing_stiffness"] = stiffness
+            if maker is not None:
+                data["bearing_maker"] = maker
+            data.setdefault("bearing_height", height)
         return cls(data.pop("name"), **data)
 
     def build(self, model: Model) -> BridgeBuild:
@@ -103,7 +120,7 @@ class ContinuousGirderBridge:
 
         foundations: list[Foundation] = []
         piers: list[Pier] = []
-        bearings: list[Bearing] = []
+        bearings: list[BridgeComponent] = []
         deck_nodes: list[tuple[float, float, float]] = []
 
         for i, x in enumerate(self.support_x):
@@ -122,14 +139,18 @@ class ContinuousGirderBridge:
                 self.pier_section,
                 segments=self.pier_segments,
             )
-            bearing = Bearing(
-                f"{self.name}_B{i}",
-                x,
-                y0,
-                z0 + self.pier_height,
-                stiffness=self.bearing_stiffness,
-                height=self.bearing_height,
-            )
+            bearing: BridgeComponent
+            if self.bearing_maker is None:
+                bearing = Bearing(
+                    f"{self.name}_B{i}",
+                    x,
+                    y0,
+                    z0 + self.pier_height,
+                    stiffness=self.bearing_stiffness or (),
+                    height=self.bearing_height,
+                )
+            else:
+                bearing = self.bearing_maker(f"{self.name}_B{i}", x, y0, z0 + self.pier_height)
             for component in (foundation, pier, bearing):
                 component.build(model)
             foundations.append(foundation)
@@ -173,3 +194,55 @@ class ContinuousGirderBridge:
             )
 
         return BridgeBuild(foundations, piers, bearings, girder, connections)
+
+
+def _bearing_from_yaml(
+    config: Mapping[str, Any],
+) -> tuple[_BearingMaker | None, list[float] | None, float]:
+    data = dict(config)
+    preset = data.pop("preset", None)
+    if preset is not None:
+        preset_table = _bearing_table()
+        try:
+            preset_data = preset_table[str(preset)]
+        except KeyError:
+            raise KeyError(
+                f"unknown bearing preset {preset!r}; available: {sorted(preset_table)}."
+            ) from None
+        data = {**preset_data, **data}
+    kind = str(data.pop("type", "linear")).replace("-", "_")
+    height = float(data.pop("height", 0.0))
+    data.pop("description", None)
+    if kind == "linear":
+        return None, [float(k) for k in data["stiffness"]], height
+    if kind == "lead_rubber":
+        values = {key: float(data[key]) for key in _LRB_FIELDS}
+
+        def maker(name: str, x: float, y: float, z: float) -> BridgeComponent:
+            return LeadRubberBearing(name, x, y, z, height=height, **values)
+
+        return maker, None, height
+    if kind == "friction_pendulum":
+        values = {key: float(data[key]) for key in _FPS_FIELDS}
+
+        def maker(name: str, x: float, y: float, z: float) -> BridgeComponent:
+            return FrictionPendulumBearing(name, x, y, z, height=height, **values)
+
+        return maker, None, height
+    raise ValueError("bearing.type must be linear, lead_rubber, or friction_pendulum.")
+
+
+_LRB_FIELDS = (
+    "vertical_stiffness",
+    "shear_stiffness",
+    "yield_force",
+    "post_yield_ratio",
+)
+_FPS_FIELDS = (
+    "vertical_stiffness",
+    "initial_stiffness",
+    "friction_slow",
+    "friction_fast",
+    "rate",
+    "radius",
+)

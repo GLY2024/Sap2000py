@@ -56,3 +56,7 @@ site/
 
 # comtypes generated cache (machine-specific, regenerated on first connect)
 src/sap2000py/_stubgen/_generated/
+
+# scratch/build caches
+.tmp-*/
+.uv-cache*/

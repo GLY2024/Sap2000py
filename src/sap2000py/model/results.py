@@ -14,12 +14,13 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from .._optional import require
-from ..enums import ItemTypeElm
+from ..enums import HistoryOutputOption, ItemTypeElm
 from ..errors import SapApiError, SapNameNotFoundError
 from ..handles import Handle
 from ._base import Manager
 from .frames import FrameHandle
 from .groups import GroupHandle
+from .links import LinkHandle
 from .points import PointHandle
 
 _NO_OUTPUT_SELECTED_HINT = (
@@ -28,11 +29,19 @@ _NO_OUTPUT_SELECTED_HINT = (
 )
 
 _ResultStrategy = Literal["objects", "temporary_group"]
-_ObjectRequestKind = Literal["frame_forces", "joint_reactions", "joint_displacements"]
+_ObjectRequestKind = Literal[
+    "frame_forces",
+    "joint_reactions",
+    "joint_displacements",
+    "link_forces",
+    "link_deformations",
+]
 _TempGroupRequestKind = Literal[
     "frame_forces_temp_group",
     "joint_reactions_temp_group",
     "joint_displacements_temp_group",
+    "link_forces_temp_group",
+    "link_deformations_temp_group",
 ]
 _RequestKind = Literal[
     "frame_forces",
@@ -41,9 +50,13 @@ _RequestKind = Literal[
     "joint_reactions_temp_group",
     "joint_displacements",
     "joint_displacements_temp_group",
+    "link_forces",
+    "link_forces_temp_group",
+    "link_deformations",
+    "link_deformations_temp_group",
     "modal_periods",
 ]
-_ResultObjectColumn = Literal["frame", "joint"]
+_ResultObjectColumn = Literal["frame", "joint", "link"]
 
 
 @dataclass(frozen=True)
@@ -261,6 +274,54 @@ class ResultBatch:
         self._requests.append(_Request("modal_periods", self._key(key, "modal_periods")))
         return self
 
+    def link_forces(
+        self,
+        *,
+        link: LinkHandle | str | None = None,
+        links: Sequence[LinkHandle | str] | None = None,
+        group: GroupHandle | str | None = None,
+        selection: bool = False,
+        key: str | None = None,
+        strategy: Literal["objects", "temporary_group"] = "objects",
+    ) -> ResultBatch:
+        """Register link force extraction."""
+        return self._register_targets(
+            kind="link_forces",
+            temp_group_kind="link_forces_temp_group",
+            single=link,
+            many=links,
+            many_label="links",
+            manager=self._results._model.links,
+            group=group,
+            selection=selection,
+            key=key,
+            strategy=strategy,
+        )
+
+    def link_deformations(
+        self,
+        *,
+        link: LinkHandle | str | None = None,
+        links: Sequence[LinkHandle | str] | None = None,
+        group: GroupHandle | str | None = None,
+        selection: bool = False,
+        key: str | None = None,
+        strategy: Literal["objects", "temporary_group"] = "objects",
+    ) -> ResultBatch:
+        """Register link deformation extraction."""
+        return self._register_targets(
+            kind="link_deformations",
+            temp_group_kind="link_deformations_temp_group",
+            single=link,
+            many=links,
+            many_label="links",
+            manager=self._results._model.links,
+            group=group,
+            selection=selection,
+            key=key,
+            strategy=strategy,
+        )
+
     def collect(self) -> dict[str, ResultTable]:
         """Execute all registered reads and return tables by key."""
         restore_selection: tuple[tuple[str, ...], tuple[str, ...]] | None = None
@@ -292,6 +353,16 @@ class ResultBatch:
                 tables[request.key] = self._collect_point_temp_group(
                     request.targets, kind="joint_displacements"
                 )
+            elif request.kind == "link_forces_temp_group":
+                self._validate_targets(request.targets, manager=self._results._model.links)
+                tables[request.key] = self._collect_link_temp_group(
+                    request.targets, kind="link_forces"
+                )
+            elif request.kind == "link_deformations_temp_group":
+                self._validate_targets(request.targets, manager=self._results._model.links)
+                tables[request.key] = self._collect_link_temp_group(
+                    request.targets, kind="link_deformations"
+                )
             else:
                 tables[request.key] = self._collect_object_request(request)
         return tables
@@ -299,8 +370,10 @@ class ResultBatch:
     def _collect_object_request(self, request: _Request) -> ResultTable:
         if request.kind == "frame_forces":
             self._validate_targets(request.targets, manager=self._results._model.frames)
-        else:
+        elif request.kind in {"joint_reactions", "joint_displacements"}:
             self._validate_targets(request.targets, manager=self._results._model.points)
+        else:
+            self._validate_targets(request.targets, manager=self._results._model.links)
 
         reads: list[ResultTable] = []
         for target in request.targets:
@@ -310,9 +383,15 @@ class ResultBatch:
             elif request.kind == "joint_reactions":
                 table = self._results._joint_reactions(target.name, target.item_type)
                 self._ensure_target_rows(table, target, column="joint")
-            else:
+            elif request.kind == "joint_displacements":
                 table = self._results._joint_displacements(target.name, target.item_type)
                 self._ensure_target_rows(table, target, column="joint")
+            elif request.kind == "link_forces":
+                table = self._results._link_forces(target.name, target.item_type)
+                self._ensure_target_rows(table, target, column="link")
+            else:
+                table = self._results._link_deformations(target.name, target.item_type)
+                self._ensure_target_rows(table, target, column="link")
             reads.append(table)
         return _merge_tables(reads)
 
@@ -387,6 +466,28 @@ class ResultBatch:
             if group is not None:
                 group.delete()
 
+    def _collect_link_temp_group(
+        self,
+        targets: Sequence[_Target],
+        *,
+        kind: Literal["link_forces", "link_deformations"],
+    ) -> ResultTable:
+        group_name = f"__sap2000py_results_{uuid4().hex}"
+        group: GroupHandle | None = None
+        try:
+            group = self._results._model.groups.add(group_name)
+            for target in targets:
+                self._results._model.links.ref(target.name).group(group)
+            if kind == "link_forces":
+                table = self._results._link_forces(group_name, ItemTypeElm.GROUP_ELM)
+            else:
+                table = self._results._link_deformations(group_name, ItemTypeElm.GROUP_ELM)
+            self._ensure_targets_rows(table, targets, column="link")
+            return table
+        finally:
+            if group is not None:
+                group.delete()
+
     def _ensure_targets_rows(
         self,
         table: ResultTable,
@@ -436,6 +537,39 @@ class Results(Manager[Handle]):
                 True,
                 api_name="Results.Setup.SetComboSelectedForOutput",
             )
+
+    def set_modal_history_output(self, option: HistoryOutputOption) -> None:
+        """Set modal history output option.
+
+        Wraps ``Results.Setup.SetOptionModalHist``.
+        """
+        self._g.call(
+            self._raw.Results.Setup.SetOptionModalHist,
+            int(option),
+            api_name="Results.Setup.SetOptionModalHist",
+        )
+
+    def set_direct_history_output(self, option: HistoryOutputOption) -> None:
+        """Set direct history output option.
+
+        Wraps ``Results.Setup.SetOptionDirectHist``.
+        """
+        self._g.call(
+            self._raw.Results.Setup.SetOptionDirectHist,
+            int(option),
+            api_name="Results.Setup.SetOptionDirectHist",
+        )
+
+    def set_nl_static_output(self, option: HistoryOutputOption) -> None:
+        """Set nonlinear static output option.
+
+        Wraps ``Results.Setup.SetOptionNLStatic``.
+        """
+        self._g.call(
+            self._raw.Results.Setup.SetOptionNLStatic,
+            int(option),
+            api_name="Results.Setup.SetOptionNLStatic",
+        )
 
     # -- extraction ---------------------------------------------------------
 
@@ -599,3 +733,132 @@ class Results(Manager[Handle]):
         """Frame internal forces along output stations for one frame."""
         frame_ref = self._model.frames.ref(frame)
         return self._frame_forces(frame_ref.name, ItemTypeElm.OBJECT_ELM)
+
+    def _link_forces(self, name: str, item_type: ItemTypeElm) -> ResultTable:
+        args = (name, int(item_type))
+        result = self._call_result_with_output_hint(
+            self._raw.Results.LinkForce,
+            "Results.LinkForce",
+            args,
+        )
+        (_n, obj, _elm, point_elm, case, _st, step, p, v2, v3, t, m2, m3) = result
+        return ResultTable(
+            _columns(
+                ["link", "point", "case", "step", "P", "V2", "V3", "T", "M2", "M3"],
+                [obj, point_elm, case, step, p, v2, v3, t, m2, m3],
+            )
+        )
+
+    def link_forces(self, link: LinkHandle | str) -> ResultTable:
+        """Link internal forces for one link.
+
+        Wraps ``Results.LinkForce``.
+        """
+        link_ref = self._model.links.ref(link)
+        return self._link_forces(link_ref.name, ItemTypeElm.OBJECT_ELM)
+
+    def _link_deformations(self, name: str, item_type: ItemTypeElm) -> ResultTable:
+        args = (name, int(item_type))
+        result = self._call_result_with_output_hint(
+            self._raw.Results.LinkDeformation,
+            "Results.LinkDeformation",
+            args,
+        )
+        (_n, obj, _elm, case, _st, step, u1, u2, u3, r1, r2, r3) = result
+        return ResultTable(
+            _columns(
+                ["link", "case", "step", "U1", "U2", "U3", "R1", "R2", "R3"],
+                [obj, case, step, u1, u2, u3, r1, r2, r3],
+            )
+        )
+
+    def link_deformations(self, link: LinkHandle | str) -> ResultTable:
+        """Link internal deformations for one link.
+
+        Wraps ``Results.LinkDeformation``.
+        """
+        link_ref = self._model.links.ref(link)
+        return self._link_deformations(link_ref.name, ItemTypeElm.OBJECT_ELM)
+
+    def base_reactions(self) -> ResultTable:
+        """Structure total base reactions.
+
+        Wraps ``Results.BaseReact``.
+        """
+        (_n, case, _st, step, fx, fy, fz, mx, my, mz, gx, gy, gz) = (
+            self._call_result_with_output_hint(self._raw.Results.BaseReact, "Results.BaseReact", ())
+        )
+        return ResultTable(
+            _columns(
+                ["case", "step", "FX", "FY", "FZ", "MX", "MY", "MZ", "GX", "GY", "GZ"],
+                [case, step, fx, fy, fz, mx, my, mz, gx, gy, gz],
+            )
+        )
+
+    def modal_participating_mass_ratios(self) -> ResultTable:
+        """Modal participating mass ratios.
+
+        Wraps ``Results.ModalParticipatingMassRatios``.
+        """
+        result = self._call_result_with_output_hint(
+            self._raw.Results.ModalParticipatingMassRatios,
+            "Results.ModalParticipatingMassRatios",
+            (),
+        )
+        (
+            _n,
+            case,
+            _st,
+            mode,
+            period,
+            ux,
+            uy,
+            uz,
+            sum_ux,
+            sum_uy,
+            sum_uz,
+            rx,
+            ry,
+            rz,
+            sum_rx,
+            sum_ry,
+            sum_rz,
+        ) = result
+        return ResultTable(
+            _columns(
+                [
+                    "case",
+                    "mode",
+                    "period",
+                    "UX",
+                    "UY",
+                    "UZ",
+                    "SumUX",
+                    "SumUY",
+                    "SumUZ",
+                    "RX",
+                    "RY",
+                    "RZ",
+                    "SumRX",
+                    "SumRY",
+                    "SumRZ",
+                ],
+                [
+                    case,
+                    mode,
+                    period,
+                    ux,
+                    uy,
+                    uz,
+                    sum_ux,
+                    sum_uy,
+                    sum_uz,
+                    rx,
+                    ry,
+                    rz,
+                    sum_rx,
+                    sum_ry,
+                    sum_rz,
+                ],
+            )
+        )

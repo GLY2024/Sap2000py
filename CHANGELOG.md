@@ -16,6 +16,13 @@ The frozen `0.1.3` sources remain available under `legacy/` and at the
 `v0.1.3-legacy` git tag for reference and temporary use.
 
 ### Added
+- Seismic (M6): bridge-seismic workflow support across S1-S5, including
+  response-spectrum and time-history functions, response-spectrum/FNA/direct
+  history/nonlinear static load cases, nonlinear link properties, extended
+  base/link/modal results, interactive database-table access, table-backed
+  plastic hinges, bridge isolators, ground-motion parsing, response spectra and
+  intensity measures, EDP extractors, NLTH/IDA/MSA runners, cloud/IDA/MSA
+  fragility fitting, and checkpointed parametric studies.
 - `SapClient` — an explicit connection object replacing the import-time
   `Saproject` singleton. Supports `launch()`, `attach()`, and use as a context
   manager. Importing the package no longer starts SAP2000.

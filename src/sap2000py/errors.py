@@ -118,3 +118,15 @@ class SapAnalysisError(SapError):
         self.failed = failed
         joined = ", ".join(f"{name} ({status})" for name, status in failed.items())
         super().__init__(f"Analysis did not complete for: {joined}")
+
+
+class SapTableSchemaError(SapError):
+    """Raised when interactive database tables cannot be applied or matched."""
+
+    def __init__(self, message: str, *, apply_log: Any | None = None) -> None:
+        self.apply_log = apply_log
+        super().__init__(message)
+
+
+class GroundMotionParseError(SapError):
+    """Raised when a ground-motion record cannot be parsed."""

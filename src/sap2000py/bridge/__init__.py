@@ -26,6 +26,7 @@ from .component import BridgeComponent
 from .components.bearing import Bearing
 from .components.foundation import Foundation
 from .components.girder import Girder
+from .components.isolators import FrictionPendulumBearing, LeadRubberBearing
 from .components.pier import Pier
 from .connect import Connection, snap_connect
 from .presets import bearing_preset, bearing_presets
@@ -38,7 +39,9 @@ __all__ = [
     "Connection",
     "ContinuousGirderBridge",
     "Foundation",
+    "FrictionPendulumBearing",
     "Girder",
+    "LeadRubberBearing",
     "Pier",
     "bearing_preset",
     "bearing_presets",

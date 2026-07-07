@@ -1,4 +1,7 @@
-"""Parametric studies and structural optimization.
+"""Parametric studies and structural optimization."""
 
-Implemented in milestone M5.
-"""
+from __future__ import annotations
+
+from .parametric import ParameterGrid, run_study
+
+__all__ = ["ParameterGrid", "run_study"]

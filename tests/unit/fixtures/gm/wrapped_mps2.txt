@@ -1,0 +1,6 @@
+# synthetic wrapped stream
+NPTS=6
+DT=0.02
+units: m/s2
+0.000000 0.980665 1.961330
+-0.980665 0.000000 0.4903325

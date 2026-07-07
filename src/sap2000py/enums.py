@@ -91,6 +91,70 @@ class LoadPatternType(IntEnum):
     PRESTRESS = 12
 
 
+class ModalCombo(IntEnum):
+    """SAP2000 response-spectrum modal combination ids."""
+
+    CQC = 1
+    SRSS = 2
+    ABS = 3
+    GMC = 4
+    NRC10 = 5
+    DOUBLE_SUM = 6
+
+
+class DirectionalCombo(IntEnum):
+    """SAP2000 response-spectrum directional combination ids."""
+
+    SRSS = 1
+    ABS = 2
+    CQC3 = 3
+
+
+class Chinese2010SeismicIntensity(IntEnum):
+    """SAP2000 ``SetChinese2010`` JGJ 3-2010 seismic intensity ids."""
+
+    INTENSITY_6_005G = 1
+    INTENSITY_7_010G = 2
+    INTENSITY_7_015G = 3
+    INTENSITY_8_020G = 4
+    INTENSITY_8_030G = 5
+    INTENSITY_9_040G = 6
+
+
+class TimeIntegrationMethod(IntEnum):
+    """SAP2000 direct-history time integration method ids."""
+
+    NEWMARK = 1
+    WILSON = 2
+    COLLOCATION = 3
+    HHT = 4
+    CHUNG_HULBERT = 5
+
+
+class ProportionalDampingType(IntEnum):
+    """SAP2000 proportional damping type ids."""
+
+    MASS_STIFFNESS = 1
+    PERIOD = 2
+    FREQUENCY = 3
+
+
+class GeomNonlinearity(IntEnum):
+    """SAP2000 geometric nonlinearity option ids."""
+
+    NONE = 0
+    P_DELTA = 1
+    P_DELTA_LARGE_DISP = 2
+
+
+class HistoryOutputOption(IntEnum):
+    """SAP2000 history and nonlinear static output option ids."""
+
+    ENVELOPES = 1
+    STEP_BY_STEP = 2
+    LAST_STEP = 3
+
+
 def dof_mask(names: Iterable[str]) -> list[bool]:
     """Convert DOF names to the 6-element boolean mask the OAPI expects.
 

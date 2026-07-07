@@ -16,3 +16,42 @@ pot_guided:
 spherical_fixed:
   description: Spherical (PTFE) bearing fixed in plane.
   stiffness: [5.0e8, 5.0e8, 1.0e10, 0.0, 0.0, 0.0]
+
+# Seismic-isolator presets. Values are illustrative current-unit inputs for
+# nonlinear link properties; confirm against project/product data before use.
+lrb_520:
+  type: lead_rubber
+  description: Lead-rubber bearing, medium bridge pier demand.
+  vertical_stiffness: 2.0e9
+  shear_stiffness: 8.0e5
+  yield_force: 1.2e3
+  post_yield_ratio: 0.1
+  height: 0.35
+lrb_800:
+  type: lead_rubber
+  description: Lead-rubber bearing, high vertical load.
+  vertical_stiffness: 3.5e9
+  shear_stiffness: 1.2e6
+  yield_force: 2.0e3
+  post_yield_ratio: 0.08
+  height: 0.45
+fps_2500:
+  type: friction_pendulum
+  description: Friction-pendulum bearing with moderate radius.
+  vertical_stiffness: 3.0e9
+  initial_stiffness: 1.5e6
+  friction_slow: 0.03
+  friction_fast: 0.05
+  rate: 2.0
+  radius: 2.5
+  height: 0.30
+fps_4000:
+  type: friction_pendulum
+  description: Friction-pendulum bearing with long effective radius.
+  vertical_stiffness: 4.0e9
+  initial_stiffness: 2.0e6
+  friction_slow: 0.025
+  friction_fast: 0.045
+  rate: 2.0
+  radius: 4.0
+  height: 0.35

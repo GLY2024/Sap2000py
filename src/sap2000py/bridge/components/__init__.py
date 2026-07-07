@@ -9,6 +9,14 @@ from __future__ import annotations
 from .bearing import Bearing
 from .foundation import Foundation
 from .girder import Girder
+from .isolators import FrictionPendulumBearing, LeadRubberBearing
 from .pier import Pier
 
-__all__ = ["Bearing", "Foundation", "Girder", "Pier"]
+__all__ = [
+    "Bearing",
+    "Foundation",
+    "FrictionPendulumBearing",
+    "Girder",
+    "LeadRubberBearing",
+    "Pier",
+]

@@ -92,6 +92,42 @@ freedom: `[U1, U2, U3, R1, R2, R3]`.
       show_root_heading: true
       heading_level: 3
 
+## Functions
+
+::: sap2000py.model.functions.Functions
+    options:
+      show_root_heading: true
+      heading_level: 3
+
+::: sap2000py.model.functions.SpectrumFunctions
+    options:
+      show_root_heading: true
+      heading_level: 3
+
+::: sap2000py.model.functions.HistoryFunctions
+    options:
+      show_root_heading: true
+      heading_level: 3
+
+## Hinges
+
+::: sap2000py.model.hinges.Hinges
+    options:
+      show_root_heading: true
+      heading_level: 3
+
+::: sap2000py.model.hinges.MomentHinge
+    options:
+      show_root_heading: true
+      heading_level: 3
+
+## Database tables
+
+::: sap2000py.model.database_tables.DatabaseTables
+    options:
+      show_root_heading: true
+      heading_level: 3
+
 ## Analysis
 
 ::: sap2000py.model.analysis.Analysis

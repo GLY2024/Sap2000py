@@ -1,0 +1,5 @@
+# synthetic two-column record
+# units: cm/s2
+0.00 0.0000
+0.05 98.0665
+0.10 -196.1330

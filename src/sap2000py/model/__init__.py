@@ -16,13 +16,16 @@ from ..enums import Units
 from ..gateway import ComGateway
 from .analysis import Analysis
 from .constraints import Constraints
+from .database_tables import DatabaseTables, TableApplyLog
 from .files import Files
 from .frame_sections import FrameSectionHandle, FrameSections
 from .frames import FrameHandle, Frames
+from .functions import FunctionHandle, Functions
 from .groups import GroupHandle, Groups
+from .hinges import HingeAssign, Hinges, MomentHinge
 from .link_props import LinkPropHandle, LinkProps
 from .links import LinkHandle, Links
-from .loads import Loads
+from .loads import HistoryLoad, Loads, RayleighDamping, SpectrumLoad, TimeIntegration
 from .materials import MaterialHandle, Materials
 from .points import PointHandle, Points
 from .results import Results
@@ -30,12 +33,20 @@ from .results import Results
 __all__ = [
     "FrameHandle",
     "FrameSectionHandle",
+    "FunctionHandle",
     "GroupHandle",
+    "HingeAssign",
+    "HistoryLoad",
     "LinkHandle",
     "LinkPropHandle",
     "MaterialHandle",
     "Model",
+    "MomentHinge",
     "PointHandle",
+    "RayleighDamping",
+    "SpectrumLoad",
+    "TableApplyLog",
+    "TimeIntegration",
 ]
 
 
@@ -61,8 +72,11 @@ class Model:
         self.links = Links(self)
         self.groups = Groups(self)
         self.loads = Loads(self)
+        self.functions = Functions(self)
         self.analysis = Analysis(self)
         self.results = Results(self)
+        self.database_tables = DatabaseTables(self)
+        self.hinges = Hinges(self)
 
     @property
     def gateway(self) -> ComGateway:
