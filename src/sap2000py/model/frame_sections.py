@@ -109,8 +109,11 @@ class FrameSections(Manager[FrameSectionHandle]):
 
         ``torsion`` is the torsional constant J; ``i22``/``i33`` the moments of
         inertia; ``as2``/``as3`` the shear areas. All in the current units.
-        Wraps ``PropFrame.SetGeneral`` (S22, S33, Z22, Z33, R22, and R33 set to
-        1; modifiers left default).
+        Wraps ``PropFrame.SetGeneral`` using the verified argument order. The
+        generated native stub also exposes an untyped ``SetGeneral_1`` COM
+        overload, but this wrapper does not route to it without a concrete
+        version-specific signature. S22, S33, Z22, Z33, R22, and R33 are set to
+        1.0; modifiers are left default.
         """
         self._g.call(
             self._raw.PropFrame.SetGeneral,
