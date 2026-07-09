@@ -7,13 +7,20 @@ import pytest
 from sap2000py import (
     FrameHandle,
     FrameSectionHandle,
+    GroupHandle,
     LinkHandle,
     LinkPropHandle,
     MaterialHandle,
     PointHandle,
 )
 from sap2000py.enums import ItemType, ItemTypeElm, LoadPatternType, MatType
-from sap2000py.errors import SapAnalysisError, SapApiError, SapError, SapNameNotFoundError
+from sap2000py.errors import (
+    SapAnalysisError,
+    SapApiError,
+    SapCompatibilityError,
+    SapError,
+    SapNameNotFoundError,
+)
 from sap2000py.model.results import ResultTable
 
 # -- materials --------------------------------------------------------------
@@ -39,6 +46,18 @@ def test_materials_add_returns_handle_and_passes_args(make_model) -> None:
     assert h.called("PropMaterial.ChangeName") == [("AUTO-S355", "S355")]
 
 
+def test_materials_add_skips_rename_when_sap_returns_requested_name(make_model) -> None:
+    h = make_model({"PropMaterial.AddMaterial": ["S355", 0], "PropMaterial.ChangeName": 0})
+
+    mat = h.model.materials.add("S355", MatType.STEEL, grade="S355", region="Europe", standard="EN")
+
+    assert mat.name == "S355"
+    assert h.called("PropMaterial.AddMaterial") == [
+        ("", int(MatType.STEEL), "Europe", "EN", "S355")
+    ]
+    assert h.called("PropMaterial.ChangeName") == []
+
+
 def test_add_concrete_builds_grade_string_and_renames(make_model) -> None:
     h = make_model({"PropMaterial.AddMaterial": ["JTG-C40", 0], "PropMaterial.ChangeName": 0})
     mat = h.model.materials.add_concrete("C40", grade="C40", code="JTG")
@@ -61,6 +80,13 @@ def test_add_steel_gb_grade_string(make_model) -> None:
     h.model.materials.add_steel("Q345", grade="Q345", code="GB")
     (add_args,) = h.called("PropMaterial.AddMaterial")
     assert add_args == ("", int(MatType.STEEL), "China", "GB", "Q345")
+
+
+def test_add_steel_jtg_grade_string(make_model) -> None:
+    h = make_model({"PropMaterial.AddMaterial": ["JTG-Q345q", 0], "PropMaterial.ChangeName": 0})
+    h.model.materials.add_steel("Q345q", grade="Q345q", code="JTG")
+    (add_args,) = h.called("PropMaterial.AddMaterial")
+    assert add_args == ("", int(MatType.STEEL), "China", "JTG", "GB/T 714-2008 Q345q")
 
 
 def test_add_isotropic_sets_properties(make_model) -> None:
@@ -193,6 +219,16 @@ def test_frame_section_handle_set_modifiers_validates_length(make_model) -> None
         h.model.frame_sections.ref("R").set_modifiers([1.0, 1.0])
 
 
+def test_frame_section_handle_set_modifiers_passes_values_and_is_chainable(make_model) -> None:
+    h = make_model({"PropFrame.SetModifiers": 0})
+    section = h.model.frame_sections.ref("R")
+    values = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3]
+
+    assert section.set_modifiers(values) is section
+
+    assert h.called("PropFrame.SetModifiers") == [("R", values)]
+
+
 def test_frame_section_handle_delete_passes_name(make_model) -> None:
     h = make_model({"PropFrame.Delete": 0})
 
@@ -211,6 +247,23 @@ def test_frame_sections_names_returns_list(make_model) -> None:
     h = make_model({"PropFrame.GetNameList": (2, ("R1", "CIRC"), 0)})
 
     assert h.model.frame_sections.names() == ["R1", "CIRC"]
+
+
+def test_frame_sections_manager_handle_helpers(make_model) -> None:
+    h = make_model({"PropFrame.GetNameList": (2, ("R1", "R2"), 0)})
+
+    first = h.model.frame_sections.get("R1")
+    second = h.model.frame_sections["R2"]
+    all_sections = h.model.frame_sections.all()
+    rebound = h.model.frame_sections.ref(FrameSectionHandle("R1"))
+    unchecked = h.model.frame_sections.ref("UNKNOWN")
+
+    assert first.name == "R1"
+    assert second.name == "R2"
+    assert [section.name for section in all_sections] == ["R1", "R2"]
+    assert rebound.name == "R1"
+    assert unchecked.name == "UNKNOWN"
+    assert h.called("PropFrame.GetNameList") == [(), (), (), ()]
 
 
 # -- frames -----------------------------------------------------------------
@@ -357,6 +410,24 @@ def test_frame_handle_release_validates_lengths(make_model) -> None:
         h.model.frames.ref("F1").release(i_end=[True], j_end=[False] * 6)
 
 
+def test_frame_handle_release_passes_complete_masks_and_zero_springs(make_model) -> None:
+    h = make_model({"FrameObj.SetReleases": 0})
+    frame = h.model.frames.ref("F1")
+
+    assert frame.release(i_end=("U1", "R3")) is frame
+
+    assert h.called("FrameObj.SetReleases") == [
+        (
+            "F1",
+            [True, False, False, False, False, True],
+            [False] * 6,
+            [0.0] * 6,
+            [0.0] * 6,
+            int(ItemType.OBJECT),
+        )
+    ]
+
+
 def test_output_stations_requires_exactly_one(make_model) -> None:
     h = make_model({"GetVersion": ("25.0.0", 25.0, 0), "FrameObj.SetOutputStations": 0})
     with pytest.raises(ValueError, match="exactly one"):
@@ -378,6 +449,24 @@ def test_output_stations_max_segment(make_model) -> None:
     h.model.frames.ref("F1").set_output_stations(max_segment_size=0.5)
     (args,) = h.called("FrameObj.SetOutputStations")
     assert args == ("F1", 1, 0.5, 2, False, False, 0)
+
+
+@pytest.mark.parametrize("major", [24, 26, 99])
+def test_frame_handle_output_stations_rejects_unverified_versions(
+    make_model,
+    major: int,
+) -> None:
+    h = make_model(
+        {
+            "GetVersion": (f"{major}.0.0", float(major), 0),
+            "FrameObj.SetOutputStations": 0,
+        }
+    )
+
+    with pytest.raises(SapCompatibilityError, match=r"FrameObj\.SetOutputStations"):
+        h.model.frames.ref("F1").set_output_stations(min_stations=3)
+
+    assert h.called("FrameObj.SetOutputStations") == []
 
 
 # -- constraints ------------------------------------------------------------
@@ -421,6 +510,12 @@ def test_constraints_add_equal_accepts_explicit_dof_and_csys(make_model) -> None
 
 def test_constraints_names_empty_model(make_model) -> None:
     h = make_model({"ConstraintDef.GetNameList": (0, None, 0)})
+
+    assert h.model.constraints.names() == []
+
+
+def test_constraints_names_empty_tuple_returns_empty_list(make_model) -> None:
+    h = make_model({"ConstraintDef.GetNameList": (0, (), 0)})
 
     assert h.model.constraints.names() == []
 
@@ -500,6 +595,12 @@ def test_link_props_add_linear_validates_lengths(make_model) -> None:
     assert h.called("PropLink.SetLinear") == []
 
 
+def test_link_props_names_empty_model(make_model) -> None:
+    h = make_model({"PropLink.GetNameList": (0, None, 0)})
+
+    assert h.model.link_props.names() == []
+
+
 def test_link_props_names_returns_list(make_model) -> None:
     h = make_model({"PropLink.GetNameList": (2, ("LP1", "LP2"), 0)})
 
@@ -512,6 +613,11 @@ def test_link_prop_handle_delete_passes_name(make_model) -> None:
     h.model.link_props.ref("LP1").delete()
 
     assert h.called("PropLink.Delete") == [("LP1",)]
+
+
+def test_ownerless_link_prop_handle_delete_requires_model_binding() -> None:
+    with pytest.raises(ValueError, match=r"m\.link_props\.ref\('LP1'\)"):
+        LinkPropHandle("LP1").delete()
 
 
 def test_links_add_by_points_returns_handle_and_passes_args(make_model) -> None:
@@ -532,6 +638,23 @@ def test_links_add_by_points_returns_handle_and_passes_args(make_model) -> None:
     assert h.called("LinkObj.AddByPoint") == [
         ("P1", "P2", "", True, "LP1", "L-user")
     ]
+
+
+def test_links_add_by_points_rejects_foreign_point_and_prop_handles(make_model) -> None:
+    h1 = make_model({"LinkObj.AddByPoint": ["L1", 0]})
+    h2 = make_model()
+
+    with pytest.raises(ValueError, match="another manager/model"):
+        h1.model.links.add_by_points(h2.model.points.ref("P1"), "P2", "LP1")
+
+    with pytest.raises(ValueError, match="another manager/model"):
+        h1.model.links.add_by_points(
+            h1.model.points.ref("P1"),
+            h1.model.points.ref("P2"),
+            h2.model.link_props.ref("LP1"),
+        )
+
+    assert h1.called("LinkObj.AddByPoint") == []
 
 
 def test_links_add_by_points_rejects_wrong_handle_type(make_model) -> None:
@@ -555,10 +678,21 @@ def test_link_handle_delete_passes_name(make_model) -> None:
     assert h.called("LinkObj.Delete") == [("L1",)]
 
 
+def test_ownerless_link_handle_delete_requires_model_binding() -> None:
+    with pytest.raises(ValueError, match=r"m\.links\.ref\('L1'\)"):
+        LinkHandle("L1").delete()
+
+
 def test_links_count_uses_value_path(make_model) -> None:
     h = make_model({"LinkObj.Count": 4})
 
     assert h.model.links.count() == 4
+
+
+def test_links_names_empty_model(make_model) -> None:
+    h = make_model({"LinkObj.GetNameList": (0, None, 0)})
+
+    assert h.model.links.names() == []
 
 
 def test_links_names_returns_list(make_model) -> None:
@@ -1280,12 +1414,31 @@ def test_point_group_assignment(make_model) -> None:
     assert h.called("PointObj.SetGroupAssign") == [("P1", "supports", False, 0)]
 
 
+def test_object_group_assignment_rejects_foreign_group_handles(make_model) -> None:
+    h1 = make_model({"FrameObj.SetGroupAssign": 0, "PointObj.SetGroupAssign": 0})
+    h2 = make_model()
+    foreign_group = h2.model.groups.ref("supports")
+
+    with pytest.raises(ValueError, match="another manager/model"):
+        h1.model.frames.ref("F1").group(foreign_group)
+    with pytest.raises(ValueError, match="another manager/model"):
+        h1.model.points.ref("P1").group(foreign_group)
+
+    assert h1.called("FrameObj.SetGroupAssign") == []
+    assert h1.called("PointObj.SetGroupAssign") == []
+
+
 def test_group_handle_delete_passes_name(make_model) -> None:
     h = make_model({"GroupDef.Delete": 0})
 
     h.model.groups.ref("supports").delete()
 
     assert h.called("GroupDef.Delete") == [("supports",)]
+
+
+def test_ownerless_group_handle_delete_requires_model_binding() -> None:
+    with pytest.raises(ValueError, match=r"m\.groups\.ref\('supports'\)"):
+        GroupHandle("supports").delete()
 
 
 def test_groups_names_empty_model(make_model) -> None:
@@ -1298,3 +1451,18 @@ def test_groups_names_returns_list(make_model) -> None:
     h = make_model({"GroupDef.GetNameList": (2, ("piers", "supports"), 0)})
 
     assert h.model.groups.names() == ["piers", "supports"]
+
+
+def test_groups_manager_handle_helpers(make_model) -> None:
+    h = make_model({"GroupDef.GetNameList": (2, ("piers", "supports"), 0)})
+
+    piers = h.model.groups.get("piers")
+    supports = h.model.groups["supports"]
+    all_groups = h.model.groups.all()
+    rebound = h.model.groups.ref(GroupHandle("piers"))
+
+    assert piers.name == "piers"
+    assert supports.name == "supports"
+    assert [group.name for group in all_groups] == ["piers", "supports"]
+    assert rebound.name == "piers"
+    assert h.called("GroupDef.GetNameList") == [(), (), (), ()]
