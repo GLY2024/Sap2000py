@@ -297,7 +297,7 @@ def test_launch_version_selects_highest_known_patch(monkeypatch: pytest.MonkeyPa
 
     client = SapClient.launch(version="25", new_model=False)
 
-    assert helper.created_paths == ["C:\\SAP251\\SAP2000.exe"]
+    assert helper.created_paths == [str(Path("C:/SAP251/SAP2000.exe"))]
     assert obj.start_calls
     assert client.version == "25.1.0"
 

@@ -33,6 +33,8 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # Same interpreter pin as the CI lint job — see ci.yml.
+          python-version: "3.13"
       - name: Sync (dev)
         run: uv sync --dev
       - name: Mypy (strict)
