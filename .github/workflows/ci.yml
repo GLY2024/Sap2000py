@@ -19,12 +19,13 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          version: "0.9.5"
           # Pin the lint interpreter: the locked dependency set (and its type
           # stubs) varies with the resolver's Python, so an unpinned runner
           # can drift from the version mypy is validated against.
           python-version: "3.13"
       - name: Sync (dev)
-        run: uv sync --dev
+        run: uv sync --dev --locked
       - name: Ruff
         run: uv run ruff check .
       - name: Ruff format check
@@ -47,7 +48,8 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          version: "0.9.5"
       - name: Sync (dev)
-        run: uv sync --dev
+        run: uv sync --dev --locked
       - name: Unit tests
         run: uv run pytest tests/unit -q
