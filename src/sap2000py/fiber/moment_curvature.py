@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from enum import Enum
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,8 +18,23 @@ from numpy.typing import NDArray
 from .section import FiberSection
 
 
-class EquilibriumError(RuntimeError):
+class MomentCurvatureError(RuntimeError):
+    """Base exception for moment-curvature analysis errors."""
+
+
+class EquilibriumError(MomentCurvatureError):
     """Raised when no axial strain equilibrates the section at a curvature."""
+
+
+class ConvergenceError(MomentCurvatureError):
+    """Raised when the axial-strain solver exhausts its iteration budget."""
+
+
+class MomentCurvatureTermination(Enum):
+    """Reason a moment-curvature analysis stopped."""
+
+    COMPLETED = "completed"
+    SECTION_FAILED = "section_failed"
 
 
 def _solve_eps0(section: FiberSection, phi: float, axial: float) -> float:
@@ -48,7 +64,7 @@ def _solve_eps0(section: FiberSection, phi: float, axial: float) -> float:
             hi, r_hi = mid, r_mid
         else:
             lo, r_lo = mid, r_mid
-    return 0.5 * (lo + hi)
+    raise ConvergenceError(f"axial-strain solver did not converge at curvature {phi:g}")
 
 
 @dataclass(frozen=True)
@@ -61,11 +77,15 @@ class MomentCurvature:
         Paired arrays describing the M-phi curve.
     axial:
         The constant axial load used (tension-positive).
+    termination:
+        ``COMPLETED`` when every requested curvature was equilibrated, or
+        ``SECTION_FAILED`` when equilibrium was lost after the initial point.
     """
 
     curvature: NDArray[np.float64]
     moment: NDArray[np.float64]
     axial: float
+    termination: MomentCurvatureTermination
 
     def bilinearize(self) -> tuple[float, float, float, float]:
         """Idealize as an equal-energy bilinear curve.
@@ -117,16 +137,30 @@ def moment_curvature(
 
     Notes
     -----
-    The analysis stops early (truncating the curve) if a curvature cannot be
-    equilibrated — typically because the section has failed.
+    If equilibrium is lost after the initial point, the analysis returns the
+    preceding truncated curve with ``termination`` set to ``SECTION_FAILED``.
+    Failure at zero curvature instead raises :class:`EquilibriumError`, because
+    the requested axial load cannot be carried.
     """
+    if isinstance(section, FiberSection) and len(section) == 0:
+        raise ValueError("section must contain at least one fiber.")
+    if n_steps < 1:
+        raise ValueError("n_steps must be >= 1.")
+    if max_curvature <= 0:
+        raise ValueError("max_curvature must be positive.")
     curvatures = np.linspace(0.0, max_curvature, n_steps + 1)
     phis: list[float] = []
     moments: list[float] = []
-    for phi in curvatures:
+    termination = MomentCurvatureTermination.COMPLETED
+    for index, phi in enumerate(curvatures):
         try:
             eps0 = _solve_eps0(section, float(phi), axial)
-        except EquilibriumError:
+        except EquilibriumError as error:
+            if index == 0:
+                raise EquilibriumError(
+                    f"cannot equilibrate axial load {axial:g} at zero curvature"
+                ) from error
+            termination = MomentCurvatureTermination.SECTION_FAILED
             break
         _n, moment = section.response(eps0, float(phi))
         phis.append(float(phi))
@@ -135,4 +169,5 @@ def moment_curvature(
         curvature=np.asarray(phis, dtype=float),
         moment=np.asarray(moments, dtype=float),
         axial=float(axial),
+        termination=termination,
     )

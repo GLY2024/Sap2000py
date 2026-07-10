@@ -54,6 +54,7 @@ class NativeApi:
             # Avoid intercepting dunder / private probes (copy, pickle, IPython).
             raise AttributeError(name)
 
+        self._gateway.ensure_open()
         attr = getattr(self._node, name)
         full = f"{self._path}.{name}" if self._path else name
 

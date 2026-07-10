@@ -18,7 +18,7 @@ from loguru import logger
 from .discovery import Installation, _major, _version_key, installations
 from .enums import Units
 from .errors import SapConnectionError, SapVersionMismatchError, SapVersionNotFoundError
-from .gateway import COMError, ComGateway, ErrorPolicy
+from .gateway import COMError, ComGateway
 from .model import Model
 from .native import NativeApi
 
@@ -88,13 +88,12 @@ class SapClient:
         *,
         owns_process: bool,
         sap_model: Any | None = None,
-        policy: ErrorPolicy = ErrorPolicy.RAISE,
     ) -> None:
         self._object = sap_object
         self._owns_process = owns_process
         self._closed = False
         sap_model = sap_object.SapModel if sap_model is None else sap_model
-        self._gateway = ComGateway(sap_model, policy=policy)
+        self._gateway = ComGateway(sap_model)
         self.model = Model(self._gateway)
         self.api = NativeApi(self._gateway, node=sap_model)
 
@@ -109,7 +108,6 @@ class SapClient:
         program_path: str | Path | None = None,
         new_model: bool = True,
         units: Units = Units.KN_M_C,
-        policy: ErrorPolicy = ErrorPolicy.RAISE,
     ) -> SapClient:
         """Start a new SAP2000 process and connect to it.
 
@@ -146,23 +144,31 @@ class SapClient:
                 f"{f' from {program_path}' if program_path else ''}."
             ) from exc
 
-        client = cls(sap_object, owns_process=True, policy=policy)
-        client._gateway.call(
-            sap_object.ApplicationStart, int(units), visible, "", api_name="ApplicationStart"
-        )
-        if requested_major is not None:
-            actual_major = client.model.sap_version_major
-            if actual_major != requested_major:
-                client._gateway.call(sap_object.ApplicationExit, False, api_name="ApplicationExit")
-                client._closed = True
-                raise SapVersionMismatchError(requested_major, actual_major)
-        if new_model:
-            client.model.files.new_blank(units=units)
+        try:
+            client = cls(sap_object, owns_process=True)
+            client._gateway.call(
+                sap_object.ApplicationStart, int(units), visible, "", api_name="ApplicationStart"
+            )
+            if requested_major is not None:
+                actual_major = client.model.sap_version_major
+                if actual_major != requested_major:
+                    raise SapVersionMismatchError(requested_major, actual_major)
+            if new_model:
+                client.model.files.new_blank(units=units)
+        except BaseException:
+            # A launched process that never made it back to the caller would
+            # otherwise leak a hidden SAP2000 process and its license seat.
+            # A failure here must not replace the original launch failure.
+            try:
+                ComGateway(None).call(sap_object.ApplicationExit, False, api_name="ApplicationExit")
+            except BaseException as cleanup_exc:
+                logger.warning("ApplicationExit failed during launch cleanup: {}", cleanup_exc)
+            raise
         logger.debug("Launched SAP2000 (visible={}).", visible)
         return client
 
     @classmethod
-    def attach(cls, *, policy: ErrorPolicy = ErrorPolicy.RAISE) -> SapClient:
+    def attach(cls) -> SapClient:
         """Attach to an already-running SAP2000 instance.
 
         Raises :class:`~sap2000py.errors.SapConnectionError` if none is found.
@@ -178,25 +184,34 @@ class SapClient:
         if sap_object is None:
             raise SapConnectionError("No running SAP2000 instance to attach to.")
         logger.debug("Attached to running SAP2000 instance.")
-        return cls(sap_object, owns_process=False, policy=policy)
+        return cls(sap_object, owns_process=False)
 
     @classmethod
     def attach_or_launch(
         cls,
         *,
         version: str | None = None,
+        visible: bool = True,
+        program_path: str | Path | None = None,
+        new_model: bool = True,
+        units: Units = Units.KN_M_C,
         launch_on_version_mismatch: bool = False,
-        **launch_kwargs: Any,
     ) -> SapClient:
         """Attach to a running instance, or launch a new one if none exists."""
-        if version is not None and launch_kwargs.get("program_path") is not None:
+        if version is not None and program_path is not None:
             raise ValueError("version and program_path are mutually exclusive.")
 
         try:
-            client = cls.attach(policy=launch_kwargs.get("policy", ErrorPolicy.RAISE))
+            client = cls.attach()
         except SapConnectionError:
             logger.info("No running instance; launching a new one.")
-            return cls.launch(version=version, **launch_kwargs)
+            return cls.launch(
+                visible=visible,
+                version=version,
+                program_path=program_path,
+                new_model=new_model,
+                units=units,
+            )
 
         if version is None:
             return client
@@ -211,7 +226,13 @@ class SapClient:
             actual_major,
             requested_major,
         )
-        return cls.launch(version=version, **launch_kwargs)
+        return cls.launch(
+            visible=visible,
+            version=version,
+            program_path=program_path,
+            new_model=new_model,
+            units=units,
+        )
 
     @staticmethod
     def installations() -> list[Installation]:
@@ -222,27 +243,26 @@ class SapClient:
 
     @property
     def raw_model(self) -> Any:
-        """The raw comtypes ``cSapModel`` — the ultimate escape hatch."""
+        """The raw comtypes ``cSapModel`` escape hatch.
+
+        References obtained here cannot be revoked after :meth:`close`; use
+        them directly only when bypassing the client's lifecycle guarantees is
+        intentional.
+        """
         return self._gateway.model
 
     @property
     def raw_object(self) -> Any:
-        """The raw comtypes ``cOAPI`` application object."""
+        """The raw comtypes ``cOAPI`` application object escape hatch.
+
+        References obtained here cannot be revoked after :meth:`close`.
+        """
         return self._object
 
     @property
     def version(self) -> str:
         """SAP2000 program version string. Wraps ``GetVersion``."""
         return self.model.sap_version
-
-    @property
-    def error_policy(self) -> ErrorPolicy:
-        """How non-zero OAPI statuses are handled (RAISE or WARN)."""
-        return self._gateway.policy
-
-    @error_policy.setter
-    def error_policy(self, policy: ErrorPolicy) -> None:
-        self._gateway.policy = policy
 
     # -- teardown -----------------------------------------------------------
 
@@ -266,6 +286,7 @@ class SapClient:
             # Mark closed only after a successful exit: a failed ApplicationExit
             # must stay observable and retryable, not become a silent no-op.
             self._gateway.call(self._object.ApplicationExit, False, api_name="ApplicationExit")
+        self._gateway.close()
         self._closed = True
 
     def __enter__(self) -> SapClient:

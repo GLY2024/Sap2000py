@@ -76,13 +76,8 @@ model.points.ref("P1").fix()       # bind a raw name to this model
 ## Errors instead of silent failures
 
 The old code often logged an OAPI error and continued. `1.0` raises
-`SapApiError` on any non-zero return code. To opt into the old lenient
-behavior for an exploratory session:
-
-```python
-from sap2000py import ErrorPolicy
-client.error_policy = ErrorPolicy.WARN   # log instead of raise
-```
+`SapApiError` on every non-zero return code. Catch that exception around an
+operation only when its failure is expected and recoverable.
 
 ## Anything not yet wrapped
 

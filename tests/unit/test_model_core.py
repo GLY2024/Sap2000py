@@ -205,9 +205,16 @@ def test_point_handle_constrain_passes_name_replace_and_itemtype(make_model) -> 
 
     assert p.constrain("C1", replace=True) is p
 
-    assert h.called("PointObj.SetConstraint") == [
-        ("P1", "C1", int(ItemType.OBJECT), True)
-    ]
+    assert h.called("PointObj.SetConstraint") == [("P1", "C1", int(ItemType.OBJECT), True)]
+
+
+def test_point_handle_group_remove_passes_remove_flag(make_model) -> None:
+    h = make_model({"PointObj.SetGroupAssign": 0})
+    p = h.model.points.ref("P1")
+
+    assert p.group("supports", remove=True) is p
+
+    assert h.called("PointObj.SetGroupAssign") == [("P1", "supports", True, int(ItemType.OBJECT))]
 
 
 def test_point_handle_reactions_delegates_to_results(

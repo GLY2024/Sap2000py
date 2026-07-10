@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import math
+from typing import cast
 
 import numpy as np
 import pytest
 
 from sap2000py.fiber import (
     BilinearSteel,
+    ConvergenceError,
+    EquilibriumError,
     FiberSection,
     LinearElastic,
     ManderConcrete,
+    MomentCurvatureTermination,
     moment_curvature,
 )
+from sap2000py.fiber.moment_curvature import _solve_eps0
 
 # -- constitutive models ----------------------------------------------------
 
@@ -92,6 +97,65 @@ def test_moment_curvature_elastic_is_linear() -> None:
     # M should equal E*I*phi across the whole range.
     expected = E * inertia * mc.curvature
     assert np.allclose(mc.moment, expected, rtol=1e-3)
+    assert mc.termination is MomentCurvatureTermination.COMPLETED
+
+
+def test_moment_curvature_rejects_empty_section() -> None:
+    with pytest.raises(ValueError, match=r"section.*fiber"):
+        moment_curvature(FiberSection(), max_curvature=0.01)
+
+
+def test_moment_curvature_rejects_nonpositive_step_count() -> None:
+    sec = FiberSection()
+    sec.add_fiber(0.0, 1.0, LinearElastic(E=1000.0))
+
+    with pytest.raises(ValueError, match="n_steps"):
+        moment_curvature(sec, max_curvature=0.01, n_steps=-1)
+
+
+def test_moment_curvature_rejects_nonpositive_max_curvature() -> None:
+    sec = FiberSection()
+    sec.add_fiber(0.0, 1.0, LinearElastic(E=1000.0))
+
+    with pytest.raises(ValueError, match="max_curvature"):
+        moment_curvature(sec, max_curvature=0.0)
+
+
+class _SectionThatLosesEquilibrium:
+    def response(self, eps0: float, phi: float) -> tuple[float, float]:
+        if phi == 0.0:
+            return 0.0, 0.0
+        return 1.0, 0.0
+
+
+class _DiscontinuousSection:
+    def response(self, eps0: float, phi: float) -> tuple[float, float]:
+        return (-1.0 if eps0 < 0.0 else 1.0), 0.0
+
+
+def test_moment_curvature_marks_section_failure_after_initial_point() -> None:
+    sec = cast(FiberSection, _SectionThatLosesEquilibrium())
+
+    mc = moment_curvature(sec, max_curvature=0.01, axial=0.0, n_steps=2)
+
+    assert np.array_equal(mc.curvature, np.array([0.0]))
+    assert np.array_equal(mc.moment, np.array([0.0]))
+    assert mc.termination is MomentCurvatureTermination.SECTION_FAILED
+
+
+def test_solve_eps0_raises_when_bisection_does_not_converge() -> None:
+    sec = cast(FiberSection, _DiscontinuousSection())
+
+    with pytest.raises(ConvergenceError, match="did not converge"):
+        _solve_eps0(sec, phi=0.0, axial=0.0)
+
+
+def test_moment_curvature_rejects_unbalanced_axial_load_at_zero_curvature() -> None:
+    sec = FiberSection()
+    sec.add_fiber(0.0, 1.0, ManderConcrete(fco=40.0, Ec=3.0e4))
+
+    with pytest.raises(EquilibriumError, match="axial load 1"):
+        moment_curvature(sec, max_curvature=0.01, axial=1.0, n_steps=2)
 
 
 def test_moment_curvature_axial_offsets_neutral_axis() -> None:

@@ -8,16 +8,18 @@ the output-selection setup.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 from uuid import uuid4
+
+from loguru import logger
 
 from .._optional import require
 from ..enums import ItemTypeElm
 from ..errors import SapApiError, SapNameNotFoundError
 from ..handles import Handle
-from ._base import Manager
+from ._base import Manager, _as_tuple
 from .frames import FrameHandle
 from .groups import GroupHandle
 from .points import PointHandle
@@ -118,8 +120,8 @@ class ResultBatch:
     """A delayed batch of result reads executed by :meth:`collect`."""
 
     _results: Results
-    _cases: Sequence[str] | None = None
-    _combos: Sequence[str] | None = None
+    _cases: tuple[str, ...] | None = None
+    _combos: tuple[str, ...] | None = None
     _requests: list[_Request] = field(default_factory=list)
 
     def _key(self, key: str | None, default: str) -> str:
@@ -188,7 +190,7 @@ class ResultBatch:
         self,
         *,
         frame: FrameHandle | str | None = None,
-        frames: Sequence[FrameHandle | str] | None = None,
+        frames: str | Iterable[FrameHandle | str] | None = None,
         group: GroupHandle | str | None = None,
         selection: bool = False,
         key: str | None = None,
@@ -199,7 +201,7 @@ class ResultBatch:
             kind="frame_forces",
             temp_group_kind="frame_forces_temp_group",
             single=frame,
-            many=frames,
+            many=_as_tuple(frames) if frames is not None else None,
             many_label="frames",
             manager=self._results._model.frames,
             group=group,
@@ -212,7 +214,7 @@ class ResultBatch:
         self,
         *,
         point: PointHandle | str | None = None,
-        points: Sequence[PointHandle | str] | None = None,
+        points: str | Iterable[PointHandle | str] | None = None,
         group: GroupHandle | str | None = None,
         selection: bool = False,
         key: str | None = None,
@@ -223,7 +225,7 @@ class ResultBatch:
             kind="joint_reactions",
             temp_group_kind="joint_reactions_temp_group",
             single=point,
-            many=points,
+            many=_as_tuple(points) if points is not None else None,
             many_label="points",
             manager=self._results._model.points,
             group=group,
@@ -236,7 +238,7 @@ class ResultBatch:
         self,
         *,
         point: PointHandle | str | None = None,
-        points: Sequence[PointHandle | str] | None = None,
+        points: str | Iterable[PointHandle | str] | None = None,
         group: GroupHandle | str | None = None,
         selection: bool = False,
         key: str | None = None,
@@ -247,7 +249,7 @@ class ResultBatch:
             kind="joint_displacements",
             temp_group_kind="joint_displacements_temp_group",
             single=point,
-            many=points,
+            many=_as_tuple(points) if points is not None else None,
             many_label="points",
             manager=self._results._model.points,
             group=group,
@@ -268,11 +270,24 @@ class ResultBatch:
             if self._cases is not None or self._combos is not None:
                 restore_selection = self._results._selected_output()
                 self._results.select_output(cases=self._cases, combos=self._combos)
-            return self._collect_requests()
-        finally:
+            result = self._collect_requests()
+        except BaseException:
+            # A restore failure here must not replace the read error that
+            # caused it — the caller needs to see why the read actually failed.
             if restore_selection is not None:
                 cases, combos = restore_selection
-                self._results.select_output(cases=cases, combos=combos)
+                try:
+                    self._results.select_output(cases=cases, combos=combos)
+                except BaseException as restore_exc:
+                    logger.warning(
+                        "Failed to restore output selection after a read error: {}",
+                        restore_exc,
+                    )
+            raise
+        if restore_selection is not None:
+            cases, combos = restore_selection
+            self._results.select_output(cases=cases, combos=combos)
+        return result
 
     def _collect_requests(self) -> dict[str, ResultTable]:
         tables: dict[str, ResultTable] = {}
@@ -409,8 +424,8 @@ class Results(Manager[Handle]):
     def select_output(
         self,
         *,
-        cases: Sequence[str] | None = None,
-        combos: Sequence[str] | None = None,
+        cases: str | Iterable[str] | None = None,
+        combos: str | Iterable[str] | None = None,
     ) -> None:
         """Choose which cases/combos results are reported for.
 
@@ -418,18 +433,20 @@ class Results(Manager[Handle]):
         Wraps ``Results.Setup.DeselectAllCasesAndCombosForOutput`` +
         ``SetCaseSelectedForOutput`` / ``SetComboSelectedForOutput``.
         """
+        case_names = _as_tuple(cases) if cases is not None else ()
+        combo_names = _as_tuple(combos) if combos is not None else ()
         self._g.call(
             self._raw.Results.Setup.DeselectAllCasesAndCombosForOutput,
             api_name="Results.Setup.DeselectAllCasesAndCombosForOutput",
         )
-        for case in cases or ():
+        for case in case_names:
             self._g.call(
                 self._raw.Results.Setup.SetCaseSelectedForOutput,
                 case,
                 True,
                 api_name="Results.Setup.SetCaseSelectedForOutput",
             )
-        for combo in combos or ():
+        for combo in combo_names:
             self._g.call(
                 self._raw.Results.Setup.SetComboSelectedForOutput,
                 combo,
@@ -518,15 +535,19 @@ class Results(Manager[Handle]):
     def batch(
         self,
         *,
-        cases: Sequence[str] | None = None,
-        combos: Sequence[str] | None = None,
+        cases: str | Iterable[str] | None = None,
+        combos: str | Iterable[str] | None = None,
     ) -> ResultBatch:
         """Create a delayed result batch.
 
         If both ``cases`` and ``combos`` are omitted, ``collect()`` reads the
         current SAP2000 output selection without clearing or changing it.
         """
-        return ResultBatch(self, _cases=cases, _combos=combos)
+        return ResultBatch(
+            self,
+            _cases=_as_tuple(cases) if cases is not None else None,
+            _combos=_as_tuple(combos) if combos is not None else None,
+        )
 
     def modal_periods(self) -> ResultTable:
         """Modal periods and frequencies. Wraps ``Results.ModalPeriod``."""

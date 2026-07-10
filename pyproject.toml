@@ -91,6 +91,9 @@ ignore = ["N802", "N803", "N806"]
 
 [tool.mypy]
 python_version = "3.10"
+# The OAPI layer uses winreg/ctypes.WinDLL, so type-check as Windows
+# regardless of the OS mypy happens to run on (e.g. Linux CI).
+platform = "win32"
 strict = true
 files = ["src/sap2000py"]
 exclude = ["legacy/", "_stubgen/"]

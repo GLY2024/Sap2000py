@@ -17,7 +17,7 @@ from typing import Any, ClassVar
 
 @dataclass(frozen=True)
 class Handle:
-    """Base class for all object handles. Stringifies to its name."""
+    """Base class for all object handles. Comparison ignores model binding."""
 
     name: str
     _owner: Any = field(default=None, compare=False, repr=False, kw_only=True)
@@ -29,8 +29,6 @@ class Handle:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Handle) or other.__class__ is not self.__class__:
             return NotImplemented
-        if self._owner is not None and other._owner is not None and self._owner is not other._owner:
-            return False
         return self.name == other.name
 
     def __hash__(self) -> int:

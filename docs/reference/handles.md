@@ -12,12 +12,12 @@ same_point = m.points.ref("P1")
 checked = m.points["P1"]        # validates by GetNameList
 ```
 
-Handle equality compares the handle type and `name`. If both handles are bound
-to owners and those owners are different objects, they compare unequal. Unbound
-handles can still compare equal to bound handles with the same type and name,
-but `ref()` validates an unbound typed handle's name before binding it to a
-manager. Each manager's `ref()` rejects handles already bound to another
-manager/model unless you pass `.name` explicitly.
+Handle equality uses value semantics: handles compare equal when their exact
+classes and `name` values match. Comparison ignores which model or owner each
+handle is bound to, matching the behavior of `__hash__`. A manager's `ref()`
+still validates an unbound typed handle's name before binding it and rejects
+handles already bound to another manager/model unless you pass `.name`
+explicitly.
 
 Top-level imports such as `from sap2000py import PointHandle` are supported for
 typing. `sap2000py.handles` contains only the base class, `as_name()`, and

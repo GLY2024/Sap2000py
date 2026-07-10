@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, overload
 
 if TYPE_CHECKING:
     from ..gateway import ComGateway
@@ -12,6 +13,19 @@ from ..errors import SapNameNotFoundError
 from ..handles import Handle
 
 H = TypeVar("H", bound=Handle)
+T = TypeVar("T")
+
+
+@overload
+def _as_tuple(values: str) -> tuple[str, ...]: ...
+
+
+@overload
+def _as_tuple(values: Iterable[T]) -> tuple[T, ...]: ...
+
+
+def _as_tuple(values: str | Iterable[T]) -> tuple[str, ...] | tuple[T, ...]:
+    return (values,) if isinstance(values, str) else tuple(values)
 
 
 class Manager(Generic[H]):
@@ -31,7 +45,7 @@ class Manager(Generic[H]):
 
     @property
     def _raw(self) -> Any:
-        return self._g.model
+        return self._g.checked_model
 
     def _require_handle_cls(self) -> type[H]:
         handle_cls = self._handle_cls

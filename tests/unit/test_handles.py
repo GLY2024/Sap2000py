@@ -26,13 +26,16 @@ def test_handles_compare_by_type_and_name() -> None:
     assert PointHandle("X") != FrameHandle("X")
 
 
-def test_bound_handles_with_different_owners_are_not_equal() -> None:
+def test_handles_with_different_owners_compare_transitively_by_value() -> None:
     owner_a = object()
     owner_b = object()
+    bound_a = PointHandle("P1", _owner=owner_a)
+    unbound = PointHandle("P1")
+    bound_b = PointHandle("P1", _owner=owner_b)
 
-    assert PointHandle("P1", _owner=owner_a) == PointHandle("P1", _owner=owner_a)
-    assert PointHandle("P1", _owner=owner_a) != PointHandle("P1", _owner=owner_b)
-    assert PointHandle("P1") == PointHandle("P1", _owner=owner_a)
+    assert bound_a == unbound
+    assert unbound == bound_b
+    assert bound_a == bound_b
 
 
 def test_handles_are_hashable() -> None:
@@ -59,7 +62,7 @@ def test_unmanaged_handle_subclasses_keep_base_equality_and_hash(handle_cls) -> 
     bound_b = handle_cls("H1", _owner=owner_b)
 
     assert handle_cls("H1", _owner=owner_a) == bound_a
-    assert bound_a != bound_b
+    assert bound_a == bound_b
     assert hash(bound_a) == hash(handle_cls("H1", _owner=owner_a))
     assert hash(bound_a) == hash(bound_b)
     assert hash(bound_a) != hash(handle_cls("H2", _owner=owner_a))

@@ -20,8 +20,14 @@ class Installation:
     path: Path
 
 
+def _normalized_version(version: str) -> str:
+    """Remove the SAP2000 product prefix from a version string."""
+    return re.sub(r"(?i)^\s*(?:SAP\s*2000\s*)?v?\s*", "", version)
+
+
 def _major(version: str) -> int:
-    match = re.search(r"\d+", version)
+    cleaned = _normalized_version(version)
+    match = re.search(r"\d+", cleaned)
     if match is None:
         raise ValueError(f"cannot parse SAP2000 major version from {version!r}.")
     return int(match.group(0))
@@ -30,7 +36,7 @@ def _major(version: str) -> int:
 def _version_key(version: str | None) -> tuple[int, ...] | None:
     if version is None:
         return None
-    parts = [int(part) for part in re.findall(r"\d+", version)]
+    parts = [int(part) for part in re.findall(r"\d+", _normalized_version(version))]
     return tuple(parts) if parts else None
 
 
