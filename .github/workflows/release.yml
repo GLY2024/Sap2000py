@@ -44,6 +44,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # The check below uses tomllib (Python 3.11+); pin the interpreter
+          # instead of relying on the runner's default python.
+          python-version: "3.13"
       - name: Verify tag matches package versions
         env:
           TAG: ${{ github.ref_name }}
