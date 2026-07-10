@@ -18,8 +18,3 @@ SAP2000 instance.
     options:
       show_root_heading: true
       heading_level: 2
-
-::: sap2000py.ErrorPolicy
-    options:
-      show_root_heading: true
-      heading_level: 2

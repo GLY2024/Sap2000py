@@ -5,7 +5,83 @@ on:
     tags: ["v*.*.*"]
 
 jobs:
-  build:
+  tests:
+    # Match CI: unit tests only, across its supported OS/Python matrix.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+      - name: Sync (dev)
+        run: uv sync --dev
+      - name: Unit tests
+        run: uv run pytest tests/unit -q
+
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Sync (dev)
+        run: uv sync --dev
+      - name: Mypy (strict)
+        run: uv run mypy
+
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag matches package versions
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import ast
+          import os
+          import tomllib
+          from pathlib import Path
+
+          tag = os.environ["TAG"]
+          tag_version = tag[1:] if tag.startswith("v") else None
+
+          with Path("pyproject.toml").open("rb") as file:
+              project_version = tomllib.load(file)["project"]["version"]
+
+          tree = ast.parse(Path("src/sap2000py/__init__.py").read_text(encoding="utf-8"))
+          init_version = None
+          for node in tree.body:
+              if not isinstance(node, ast.Assign):
+                  continue
+              if any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets):
+                  if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                      init_version = node.value.value
+                  break
+
+          if init_version is None:
+              raise SystemExit("Version check failed: src/sap2000py/__init__.py has no string __version__ assignment")
+
+          if tag_version is None or len({tag_version, project_version, init_version}) != 1:
+              raise SystemExit(
+                  "Version mismatch: expected the pushed tag, pyproject.toml, and "
+                  "src/sap2000py/__init__.py to agree; got "
+                  f"tag={tag!r}, project.version={project_version!r}, __version__={init_version!r}"
+              )
+
+          print(f"Verified release version {tag_version}")
+          PY
+
+  artifacts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,13 +89,15 @@ jobs:
         uses: astral-sh/setup-uv@v5
       - name: Build sdist and wheel
         run: uv build
+      - name: Check distribution artifacts
+        run: uvx twine check dist/*
       - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/
 
   publish:
-    needs: build
+    needs: [tests, mypy, version, artifacts]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

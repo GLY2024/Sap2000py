@@ -55,14 +55,13 @@ silent wrong value.
 from __future__ import annotations
 
 from collections.abc import Callable
-from enum import Enum
 from typing import Any
 
 from loguru import logger
 
-from .errors import SapApiError, SapComError
+from .errors import SapApiError, SapComError, SapGatewayClosedError
 
-__all__ = ["COMError", "ComGateway", "ErrorPolicy"]
+__all__ = ["COMError", "ComGateway"]
 
 try:  # comtypes is Windows-only; keep the module importable elsewhere.
     from comtypes import COMError
@@ -72,13 +71,6 @@ except ImportError:  # pragma: no cover - exercised only off-Windows
         """Fallback so non-Windows imports don't fail; never raised by COM."""
 
         hresult: int | None = None
-
-
-class ErrorPolicy(Enum):
-    """What the gateway does when an OAPI call returns a non-zero status."""
-
-    RAISE = "raise"
-    WARN = "warn"
 
 
 #: Leaf method names whose bare-``long`` comtypes return is a direct *value*, not
@@ -130,23 +122,36 @@ class ComGateway:
     ----------
     sap_model:
         The raw comtypes ``SapModel`` object.
-    policy:
-        Behaviour on a non-zero status; defaults to
-        :attr:`ErrorPolicy.RAISE`.
     """
 
-    def __init__(self, sap_model: Any, policy: ErrorPolicy = ErrorPolicy.RAISE) -> None:
+    def __init__(self, sap_model: Any) -> None:
         self._model = sap_model
-        self.policy = policy
+        self._closed = False
 
     @property
     def model(self) -> Any:
-        """The raw comtypes ``SapModel`` — the ultimate escape hatch."""
+        """The raw comtypes ``SapModel`` escape hatch, unaffected by :meth:`close`."""
         return self._model
+
+    def ensure_open(self) -> None:
+        """Raise if this gateway has been closed."""
+        if self._closed:
+            raise SapGatewayClosedError()
+
+    @property
+    def checked_model(self) -> Any:
+        """Return the model after enforcing this gateway's lifecycle."""
+        self.ensure_open()
+        return self._model
+
+    def close(self) -> None:
+        """Prevent this gateway from invoking the OAPI again."""
+        self._closed = True
 
     # -- invocation ---------------------------------------------------------
 
     def _invoke(self, com_func: Callable[..., Any], args: tuple[Any, ...], api_name: str) -> Any:
+        self.ensure_open()
         logger.trace("OAPI call {} args={!r}", api_name or getattr(com_func, "__name__", "?"), args)
         try:
             return com_func(*args)
@@ -157,10 +162,7 @@ class ComGateway:
     def _check(self, code: int, api_name: str, args: tuple[Any, ...], hint: str = "") -> None:
         if code == 0:
             return
-        error = SapApiError(api_name, args, code, hint=hint)
-        if self.policy is ErrorPolicy.RAISE:
-            raise error
-        logger.warning("{}", error)
+        raise SapApiError(api_name, args, code, hint=hint)
 
     # -- public call styles -------------------------------------------------
 
@@ -169,8 +171,7 @@ class ComGateway:
 
         Returns the unpacked out-parameters: ``None`` if there were none, the
         single value if there was one, otherwise a tuple. Raises
-        :class:`~sap2000py.errors.SapApiError` on a non-zero status (unless the
-        policy is :attr:`ErrorPolicy.WARN`).
+        :class:`~sap2000py.errors.SapApiError` on a non-zero status.
         """
         result = self._invoke(com_func, args, api_name)
         if isinstance(result, (list, tuple)):

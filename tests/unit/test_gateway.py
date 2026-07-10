@@ -9,9 +9,10 @@ from sap2000py.errors import (
     MissingDependencyError,
     SapApiError,
     SapComError,
+    SapGatewayClosedError,
     SapNameNotFoundError,
 )
-from sap2000py.gateway import ComGateway, ErrorPolicy
+from sap2000py.gateway import ComGateway
 
 
 def gateway() -> ComGateway:
@@ -122,15 +123,28 @@ def test_auto_bare_str_and_float_pass_through() -> None:
     assert gateway().auto(lambda: 1.25, api_name="GetOAPIVersionNumber") == 1.25
 
 
-def test_auto_warn_policy_returns_status_int() -> None:
-    gw = ComGateway(sap_model=object(), policy=ErrorPolicy.WARN)
-    # Under WARN the non-zero status is logged, not raised, and still returned.
-    assert gw.auto(lambda: 2, api_name="File.Save") == 2
+def test_gateway_does_not_accept_an_error_policy() -> None:
+    with pytest.raises(TypeError, match="policy"):
+        ComGateway(sap_model=object(), policy="warn")  # type: ignore[call-arg]
 
 
-def test_warn_policy_does_not_raise() -> None:
-    gw = ComGateway(sap_model=object(), policy=ErrorPolicy.WARN)
-    assert gw.call(lambda: 1, api_name="Setter") is None  # logged, not raised
+def test_checked_model_rejects_access_after_close_but_raw_model_does_not() -> None:
+    model = object()
+    gw = ComGateway(model)
+    gw.close()
+
+    assert gw.model is model
+    with pytest.raises(SapGatewayClosedError, match="gateway is closed"):
+        _ = gw.checked_model
+
+
+@pytest.mark.parametrize("style", ["call", "value", "auto"])
+def test_closed_gateway_rejects_every_call_style(style: str) -> None:
+    gw = gateway()
+    gw.close()
+
+    with pytest.raises(SapGatewayClosedError, match="gateway is closed"):
+        getattr(gw, style)(lambda: 0, api_name="File.Save")
 
 
 def test_args_are_forwarded() -> None:
@@ -184,8 +198,7 @@ def test_sap_api_error_message_formats_hint_conditionally() -> None:
     with_hint = SapApiError("File.Save", ("model.sdb",), 7, hint="Use client.raw_model.")
 
     assert str(without_hint) == (
-        "OAPI call 'File.Save' returned non-zero status 7. "
-        "Arguments: ('model.sdb',)"
+        "OAPI call 'File.Save' returned non-zero status 7. Arguments: ('model.sdb',)"
     )
     assert str(with_hint) == (
         "OAPI call 'File.Save' returned non-zero status 7. "

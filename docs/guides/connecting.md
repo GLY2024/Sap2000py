@@ -64,15 +64,10 @@ running instance alone and start a new matching process, pass
 client.close(save="model.sdb")   # save, then (if launched) exit
 ```
 
-## Error policy
+## OAPI errors
 
-By default any non-zero OAPI status raises `SapApiError`. For an exploratory
-session you can downgrade to logged warnings:
-
-```python
-from sap2000py import ErrorPolicy
-client.error_policy = ErrorPolicy.WARN
-```
+Every non-zero OAPI status raises `SapApiError`. Catch that exception when a
+specific operation has an expected recoverable failure.
 
 ## Escape hatches
 

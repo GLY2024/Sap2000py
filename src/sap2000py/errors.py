@@ -91,6 +91,13 @@ class SapApiError(SapError):
         super().__init__(message)
 
 
+class SapGatewayClosedError(SapError):
+    """Raised when an OAPI call is attempted through a closed gateway."""
+
+    def __init__(self) -> None:
+        super().__init__("SAP2000 gateway is closed.")
+
+
 class SapNameNotFoundError(SapError):
     """Raised when a client-side name validation cannot find an object."""
 

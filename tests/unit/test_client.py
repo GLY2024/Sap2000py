@@ -17,10 +17,10 @@ from sap2000py.discovery import Installation
 from sap2000py.errors import (
     SapApiError,
     SapConnectionError,
+    SapGatewayClosedError,
     SapVersionMismatchError,
     SapVersionNotFoundError,
 )
-from sap2000py.gateway import ErrorPolicy
 
 
 class FakeSapObject:
@@ -87,11 +87,38 @@ def test_attach_uses_running_instance(monkeypatch: pytest.MonkeyPatch) -> None:
     helper = FakeHelper(obj)
     monkeypatch.setattr(client_module, "_make_helper", lambda: helper)
 
-    client = SapClient.attach(policy=ErrorPolicy.WARN)
+    client = SapClient.attach()
 
     assert client.raw_object is obj
-    assert client.error_policy is ErrorPolicy.WARN
     assert helper.attached_progids == ["CSI.SAP2000.API.SapObject"]
+
+
+def test_attach_does_not_accept_an_error_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    obj = FakeSapObject([0])
+    helper = FakeHelper(obj)
+    monkeypatch.setattr(client_module, "_make_helper", lambda: helper)
+
+    with pytest.raises(TypeError, match="policy"):
+        SapClient.attach(policy="warn")  # type: ignore[call-arg]
+
+
+def test_attach_or_launch_does_not_accept_an_error_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attached = make_client([0], owns_process=False)
+
+    def fake_attach(cls):
+        return attached
+
+    monkeypatch.setattr(SapClient, "attach", classmethod(fake_attach))
+
+    with pytest.raises(TypeError, match="policy"):
+        SapClient.attach_or_launch(policy="warn")
+
+
+def test_attach_or_launch_rejects_misspelled_launch_keyword() -> None:
+    with pytest.raises(TypeError, match="visble"):
+        SapClient.attach_or_launch(visble=False)  # type: ignore[call-arg]
 
 
 def test_attach_raises_when_no_running_instance(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -125,14 +152,6 @@ def test_installations_delegates_to_discovery(monkeypatch: pytest.MonkeyPatch) -
     assert SapClient.installations() is discovered
 
 
-def test_error_policy_getter_and_setter() -> None:
-    client = make_client([0])
-
-    assert client.error_policy is ErrorPolicy.RAISE
-    client.error_policy = ErrorPolicy.WARN
-    assert client.error_policy is ErrorPolicy.WARN
-
-
 def test_raw_model_returns_underlying_sap_model() -> None:
     obj = FakeSapObject([0])
     client = SapClient(obj, owns_process=False)
@@ -160,10 +179,58 @@ def test_failed_exit_raises_and_stays_retryable() -> None:
     assert client._object.exit_calls == 2
 
 
+def test_failed_save_leaves_client_open_for_close_retry() -> None:
+    client = make_client([0])
+
+    class File:
+        def Save(self, _path: str) -> int:
+            return 1
+
+    client.raw_model.File = File()
+
+    with pytest.raises(SapApiError, match=r"File\.Save"):
+        client.close(save="model.sdb")
+
+    assert client._closed is False
+    assert client._object.exit_calls == 0
+
+    client.close()
+    assert client._object.exit_calls == 1
+
+
+def test_close_closes_the_gateway_after_owned_process_exit() -> None:
+    client = make_client([0])
+    gw = client._gateway
+
+    client.close()
+
+    with pytest.raises(SapGatewayClosedError, match="gateway is closed"):
+        gw.call(lambda: 0, api_name="File.Save")
+
+
+def test_closed_client_rejects_typed_and_native_facade_access() -> None:
+    client = make_client([0])
+    raw_model = client.raw_model
+    raw_object = client.raw_object
+    client.close()
+
+    with pytest.raises(SapGatewayClosedError, match="gateway is closed"):
+        client.model.files.save()
+    with pytest.raises(SapGatewayClosedError, match="gateway is closed"):
+        _ = client.api.File
+
+    assert client.raw_model is raw_model
+    assert client.raw_object is raw_object
+
+
 def test_attached_instance_is_not_exited() -> None:
     client = make_client([0], owns_process=False)
+    gw = client._gateway
     client.close()
     assert client._object.exit_calls == 0
+    assert client._closed is True
+    with pytest.raises(SapGatewayClosedError, match="gateway is closed"):
+        gw.call(lambda: 0, api_name="File.Save")
 
 
 def test_context_manager_exits_owned_process() -> None:
@@ -268,6 +335,82 @@ def test_launch_version_mismatch_exits_before_new_model(monkeypatch: pytest.Monk
     assert obj.SapModel.new_blank_calls == 0
 
 
+def test_launch_exits_process_when_application_start_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    obj = FakeSapObject([0])
+    obj.ApplicationStart = lambda units, visible, file_name: 7
+    helper = FakeHelper(obj)
+    monkeypatch.setattr(client_module, "_make_helper", lambda: helper)
+
+    with pytest.raises(SapApiError, match="ApplicationStart"):
+        SapClient.launch(new_model=False)
+
+    assert obj.exit_calls == 1
+
+
+def test_launch_exits_process_when_client_construction_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    obj = FakeSapObject([0])
+    helper = FakeHelper(obj)
+    monkeypatch.setattr(client_module, "_make_helper", lambda: helper)
+
+    def fail_construction(self, *args, **kwargs) -> None:
+        raise RuntimeError("construction failed")
+
+    monkeypatch.setattr(SapClient, "__init__", fail_construction)
+
+    with pytest.raises(RuntimeError, match="construction failed"):
+        SapClient.launch(new_model=False)
+
+    assert obj.exit_calls == 1
+
+
+def test_launch_exits_process_on_keyboard_interrupt(monkeypatch: pytest.MonkeyPatch) -> None:
+    obj = FakeSapObject([0])
+
+    def interrupt_start(_units: int, _visible: bool, _file_name: str) -> int:
+        raise KeyboardInterrupt
+
+    obj.ApplicationStart = interrupt_start
+    helper = FakeHelper(obj)
+    monkeypatch.setattr(client_module, "_make_helper", lambda: helper)
+
+    with pytest.raises(KeyboardInterrupt):
+        SapClient.launch(new_model=False)
+
+    assert obj.exit_calls == 1
+
+
+def test_launch_does_not_mask_launch_failure_when_cleanup_also_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # ApplicationExit cleanup itself fails (status 1); the original
+    # ApplicationStart failure must still be what propagates.
+    obj = FakeSapObject([1])
+    obj.ApplicationStart = lambda units, visible, file_name: 7
+    helper = FakeHelper(obj)
+    monkeypatch.setattr(client_module, "_make_helper", lambda: helper)
+
+    with pytest.raises(SapApiError, match="ApplicationStart"):
+        SapClient.launch(new_model=False)
+
+    assert obj.exit_calls == 1
+
+
+def test_launch_exits_process_when_new_blank_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    obj = FakeSapObject([0])
+    obj.SapModel.InitializeNewModel = lambda units: 7
+    helper = FakeHelper(obj)
+    monkeypatch.setattr(client_module, "_make_helper", lambda: helper)
+
+    with pytest.raises(SapApiError, match="InitializeNewModel"):
+        SapClient.launch(new_model=True)
+
+    assert obj.exit_calls == 1
+
+
 def test_attach_or_launch_reuses_matching_running_version(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -275,7 +418,7 @@ def test_attach_or_launch_reuses_matching_running_version(
     launched = SapClient(FakeSapObject([0], version="25.0.0"), owns_process=True)
     launch_calls: list[dict[str, object]] = []
 
-    def fake_attach(cls, *, policy):
+    def fake_attach(cls):
         return attached
 
     def fake_launch(cls, **kwargs):
@@ -298,7 +441,7 @@ def test_attach_or_launch_rejects_version_and_program_path_before_attach(
     attach_calls = 0
     launch_calls: list[dict[str, object]] = []
 
-    def fake_attach(cls, *, policy):
+    def fake_attach(cls):
         nonlocal attach_calls
         attach_calls += 1
         return attached
@@ -324,7 +467,7 @@ def test_attach_or_launch_raises_on_mismatched_running_version_by_default(
     launched = SapClient(FakeSapObject([0], version="25.0.0"), owns_process=True)
     launch_calls: list[dict[str, object]] = []
 
-    def fake_attach(cls, *, policy):
+    def fake_attach(cls):
         return attached
 
     def fake_launch(cls, **kwargs):
@@ -348,7 +491,7 @@ def test_attach_or_launch_can_launch_on_mismatched_running_version_when_opted_in
     launched = SapClient(FakeSapObject([0], version="25.0.0"), owns_process=True)
     launch_calls: list[dict[str, object]] = []
 
-    def fake_attach(cls, *, policy):
+    def fake_attach(cls):
         return attached
 
     def fake_launch(cls, **kwargs):
@@ -365,5 +508,13 @@ def test_attach_or_launch_can_launch_on_mismatched_running_version_when_opted_in
     )
 
     assert client is launched
-    assert launch_calls == [{"version": "25", "visible": False}]
+    assert launch_calls == [
+        {
+            "visible": False,
+            "version": "25",
+            "program_path": None,
+            "new_model": True,
+            "units": client_module.Units.KN_M_C,
+        }
+    ]
     assert attached.raw_object.exit_calls == 0

@@ -27,16 +27,26 @@ from .materials import (
     ManderConcrete,
     UniaxialMaterial,
 )
-from .moment_curvature import EquilibriumError, MomentCurvature, moment_curvature
+from .moment_curvature import (
+    ConvergenceError,
+    EquilibriumError,
+    MomentCurvature,
+    MomentCurvatureError,
+    MomentCurvatureTermination,
+    moment_curvature,
+)
 from .section import FiberSection
 
 __all__ = [
     "BilinearSteel",
+    "ConvergenceError",
     "EquilibriumError",
     "FiberSection",
     "LinearElastic",
     "ManderConcrete",
     "MomentCurvature",
+    "MomentCurvatureError",
+    "MomentCurvatureTermination",
     "UniaxialMaterial",
     "moment_curvature",
 ]

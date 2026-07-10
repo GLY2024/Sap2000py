@@ -33,11 +33,11 @@ from .errors import (
     SapCompatibilityError,
     SapConnectionError,
     SapError,
+    SapGatewayClosedError,
     SapNameNotFoundError,
     SapVersionMismatchError,
     SapVersionNotFoundError,
 )
-from .gateway import ErrorPolicy
 from .handles import (
     AreaHandle,
     CableHandle,
@@ -63,7 +63,6 @@ __all__ = [  # noqa: RUF022 - grouped by category for readability, not sorted
     "SapClient",
     "Installation",
     "installations",
-    "ErrorPolicy",
     # enums / values
     "Units",
     "ItemType",
@@ -79,6 +78,7 @@ __all__ = [  # noqa: RUF022 - grouped by category for readability, not sorted
     "AnalysisReport",
     # errors
     "SapError",
+    "SapGatewayClosedError",
     "SapConnectionError",
     "SapComError",
     "SapApiError",

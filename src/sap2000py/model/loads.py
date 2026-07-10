@@ -106,11 +106,13 @@ class LoadCases(Manager[Handle]):
         )
         return name
 
-    def add_modal_ritz(self, name: str, *, num_modes: int = 12) -> str:
+    def add_modal_ritz(self, name: str, *, num_modes: int = 12, min_modes: int = 1) -> str:
         """Create a Ritz modal case requesting ``num_modes`` modes.
 
         Wraps ``LoadCases.ModalRitz.SetCase`` + ``SetNumberModes``.
         """
+        if not 1 <= min_modes <= num_modes:
+            raise ValueError("min_modes must satisfy 1 <= min_modes <= num_modes.")
         self._g.call(
             self._raw.LoadCases.ModalRitz.SetCase, name, api_name="LoadCases.ModalRitz.SetCase"
         )
@@ -118,7 +120,7 @@ class LoadCases(Manager[Handle]):
             self._raw.LoadCases.ModalRitz.SetNumberModes,
             name,
             int(num_modes),
-            int(num_modes),
+            int(min_modes),
             api_name="LoadCases.ModalRitz.SetNumberModes",
         )
         return name

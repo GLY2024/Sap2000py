@@ -309,9 +309,7 @@ def test_add_by_points_rejects_missing_point_name_before_com_call(make_model) ->
 
 
 def test_add_by_points_rejects_wrong_handle_type(make_model) -> None:
-    h = make_model(
-        {"PointObj.GetNameList": (2, ("P1", "P2"), 0), "FrameObj.AddByPoint": ["F1", 0]}
-    )
+    h = make_model({"PointObj.GetNameList": (2, ("P1", "P2"), 0), "FrameObj.AddByPoint": ["F1", 0]})
     with pytest.raises(TypeError, match="expected PointHandle"):
         h.model.frames.add_by_points(FrameSectionHandle("P1"), "P2", section="R")
     with pytest.raises(TypeError, match="expected FrameSectionHandle"):
@@ -621,9 +619,7 @@ def test_ownerless_link_prop_handle_delete_requires_model_binding() -> None:
 
 
 def test_links_add_by_points_returns_handle_and_passes_args(make_model) -> None:
-    h = make_model(
-        {"PointObj.GetNameList": (2, ("P1", "P2"), 0), "LinkObj.AddByPoint": ["L1", 0]}
-    )
+    h = make_model({"PointObj.GetNameList": (2, ("P1", "P2"), 0), "LinkObj.AddByPoint": ["L1", 0]})
 
     link = h.model.links.add_by_points(
         h.model.points.ref("P1"),
@@ -635,9 +631,7 @@ def test_links_add_by_points_returns_handle_and_passes_args(make_model) -> None:
 
     assert isinstance(link, LinkHandle)
     assert link.name == "L1"
-    assert h.called("LinkObj.AddByPoint") == [
-        ("P1", "P2", "", True, "LP1", "L-user")
-    ]
+    assert h.called("LinkObj.AddByPoint") == [("P1", "P2", "", True, "LP1", "L-user")]
 
 
 def test_links_add_by_points_rejects_foreign_point_and_prop_handles(make_model) -> None:
@@ -658,9 +652,7 @@ def test_links_add_by_points_rejects_foreign_point_and_prop_handles(make_model) 
 
 
 def test_links_add_by_points_rejects_wrong_handle_type(make_model) -> None:
-    h = make_model(
-        {"PointObj.GetNameList": (2, ("P1", "P2"), 0), "LinkObj.AddByPoint": ["L1", 0]}
-    )
+    h = make_model({"PointObj.GetNameList": (2, ("P1", "P2"), 0), "LinkObj.AddByPoint": ["L1", 0]})
 
     with pytest.raises(TypeError, match="expected PointHandle"):
         h.model.links.add_by_points(FrameHandle("P1"), "P2", "LP1")
@@ -729,6 +721,20 @@ def test_modal_eigen_sets_modes(make_model) -> None:
     assert h.called("LoadCases.ModalEigen.SetNumberModes") == [("MODAL", 10, 1)]
 
 
+def test_modal_ritz_sets_default_min_modes(make_model) -> None:
+    h = make_model({"LoadCases.ModalRitz.SetCase": 0, "LoadCases.ModalRitz.SetNumberModes": 0})
+    h.model.loads.cases.add_modal_ritz("RITZ", num_modes=10)
+    assert h.called("LoadCases.ModalRitz.SetNumberModes") == [("RITZ", 10, 1)]
+
+
+@pytest.mark.parametrize("min_modes", [0, 11])
+def test_modal_ritz_rejects_invalid_min_modes(make_model, min_modes: int) -> None:
+    h = make_model()
+    with pytest.raises(ValueError, match="min_modes"):
+        h.model.loads.cases.add_modal_ritz("RITZ", num_modes=10, min_modes=min_modes)
+    assert h.called("LoadCases.ModalRitz.SetCase") == []
+
+
 # -- analysis ---------------------------------------------------------------
 
 
@@ -767,10 +773,45 @@ def test_run_raises_when_requested_case_unfinished(make_model) -> None:
         h.model.analysis.run(cases=["MODAL"])
 
 
+def test_run_treats_string_case_as_one_name(make_model) -> None:
+    h = make_model(
+        {
+            "GetModelFilename": "m.sdb",
+            "Analyze.SetRunCaseFlag": 0,
+            "Analyze.RunAnalysis": 0,
+            "Analyze.GetCaseStatus": _status(("DEAD", 4)),
+        }
+    )
+    h.model.analysis.run(cases="DEAD")
+    assert h.called("Analyze.SetRunCaseFlag") == [("", False, True), ("DEAD", True, False)]
+
+
+def test_run_materializes_case_generator_once(make_model) -> None:
+    h = make_model(
+        {
+            "GetModelFilename": "m.sdb",
+            "Analyze.SetRunCaseFlag": 0,
+            "Analyze.RunAnalysis": 0,
+            "Analyze.GetCaseStatus": _status(("MODAL", 3)),
+        }
+    )
+    with pytest.raises(SapAnalysisError):
+        h.model.analysis.run(cases=(case for case in ["MODAL"]))
+    assert h.called("Analyze.SetRunCaseFlag") == [("", False, True), ("MODAL", True, False)]
+
+
 def test_run_requires_saved_model(make_model) -> None:
     h = make_model({"GetModelFilename": ""})  # not saved
     with pytest.raises(SapError, match="must be saved"):
         h.model.analysis.run(cases=["MODAL"])
+
+
+def test_run_rejects_empty_cases_list(make_model) -> None:
+    h = make_model({"GetModelFilename": "m.sdb"})
+    with pytest.raises(ValueError, match="cases=\\[\\]"):
+        h.model.analysis.run(cases=[])
+    assert h.called("Analyze.SetRunCaseFlag") == []
+    assert h.called("Analyze.RunAnalysis") == []
 
 
 # -- results ----------------------------------------------------------------
@@ -1031,6 +1072,57 @@ def test_result_batch_temporarily_selects_output_when_cases_are_given(make_model
     assert h.called("Results.JointReact") == [("supports", int(ItemTypeElm.GROUP_ELM))]
 
 
+def test_select_output_treats_string_case_as_one_name(make_model) -> None:
+    h = make_model(
+        {
+            "Results.Setup.DeselectAllCasesAndCombosForOutput": 0,
+            "Results.Setup.SetCaseSelectedForOutput": 0,
+        }
+    )
+    h.model.results.select_output(cases="DEAD")
+    assert h.called("Results.Setup.SetCaseSelectedForOutput") == [("DEAD", True)]
+
+
+def test_select_output_materializes_cases_before_deselecting(make_model) -> None:
+    selected_cases = {"BASE"}
+
+    def deselect_output() -> int:
+        selected_cases.clear()
+        return 0
+
+    h = make_model(
+        {
+            "Results.Setup.DeselectAllCasesAndCombosForOutput": deselect_output,
+            "Results.Setup.SetCaseSelectedForOutput": 0,
+        }
+    )
+
+    def cases():
+        yield "DEAD"
+        raise RuntimeError("case iteration failed")
+
+    with pytest.raises(RuntimeError, match="case iteration failed"):
+        h.model.results.select_output(cases=cases())
+
+    assert selected_cases == {"BASE"}
+    assert h.called("Results.Setup.DeselectAllCasesAndCombosForOutput") == []
+    assert h.called("Results.Setup.SetCaseSelectedForOutput") == []
+
+
+def test_result_batch_accepts_case_generator(make_model) -> None:
+    h = make_model(
+        {
+            **_selected_output_responses(),
+            "Results.Setup.DeselectAllCasesAndCombosForOutput": 0,
+            "Results.Setup.SetCaseSelectedForOutput": 0,
+            "Results.ModalPeriod": (0, (), (), (), (), (), (), (), 0),
+        }
+    )
+    batch = h.model.results.batch(cases=(case for case in ["DEAD"]))
+    batch.modal_periods().collect()
+    assert h.called("Results.Setup.SetCaseSelectedForOutput") == [("DEAD", True), ("DEAD", True)]
+
+
 def test_result_batch_restores_selected_output_between_batches_and_single_read(make_model) -> None:
     selected_cases = {"BASE"}
 
@@ -1120,6 +1212,88 @@ def test_result_batch_restores_selected_output_when_temporary_selection_fails(ma
     assert h.called("Results.ModalPeriod") == []
 
 
+def test_result_batch_does_not_mask_read_error_when_restore_also_fails(make_model) -> None:
+    selected_cases = {"BASE"}
+
+    def deselect_output() -> int:
+        selected_cases.clear()
+        return 0
+
+    def set_case_output(case: str, selected: bool) -> int:
+        if selected and case == "BASE":
+            return 7
+        if selected:
+            selected_cases.add(case)
+        else:
+            selected_cases.discard(case)
+        return 0
+
+    def get_case_output(case: str, _selected: bool) -> tuple[bool, int]:
+        return case in selected_cases, 0
+
+    h = make_model(
+        {
+            "LoadCases.GetNameList": (3, ("BASE", "DEAD", "LIVE"), 0),
+            "Results.Setup.GetCaseSelectedForOutput": get_case_output,
+            "RespCombo.GetNameList": (0, (), 0),
+            "Results.Setup.DeselectAllCasesAndCombosForOutput": deselect_output,
+            "Results.Setup.SetCaseSelectedForOutput": set_case_output,
+            "Results.ModalPeriod": 7,
+        }
+    )
+
+    # The read itself fails (ModalPeriod), and restoring the prior output
+    # selection (re-selecting BASE) also fails. The read error must win.
+    with pytest.raises(SapApiError, match="ModalPeriod"):
+        h.model.results.batch(cases=["DEAD"]).modal_periods().collect()
+
+    assert h.called("Results.Setup.SetCaseSelectedForOutput") == [
+        ("DEAD", True),
+        ("BASE", True),
+    ]
+
+
+def test_result_batch_restores_selected_output_after_keyboard_interrupt(make_model) -> None:
+    selected_cases = {"BASE"}
+
+    def deselect_output() -> int:
+        selected_cases.clear()
+        return 0
+
+    def set_case_output(case: str, selected: bool) -> int:
+        if selected:
+            selected_cases.add(case)
+        else:
+            selected_cases.discard(case)
+        return 0
+
+    def get_case_output(case: str, _selected: bool) -> tuple[bool, int]:
+        return case in selected_cases, 0
+
+    def interrupt():
+        raise KeyboardInterrupt
+
+    h = make_model(
+        {
+            "LoadCases.GetNameList": (2, ("BASE", "DEAD"), 0),
+            "Results.Setup.GetCaseSelectedForOutput": get_case_output,
+            "RespCombo.GetNameList": (0, (), 0),
+            "Results.Setup.DeselectAllCasesAndCombosForOutput": deselect_output,
+            "Results.Setup.SetCaseSelectedForOutput": set_case_output,
+            "Results.ModalPeriod": interrupt,
+        }
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        h.model.results.batch(cases=["DEAD"]).modal_periods().collect()
+
+    assert selected_cases == {"BASE"}
+    assert h.called("Results.Setup.SetCaseSelectedForOutput") == [
+        ("DEAD", True),
+        ("BASE", True),
+    ]
+
+
 def test_result_batch_modal_periods_uses_default_key_and_combo_selection(make_model) -> None:
     h = make_model(
         {
@@ -1182,6 +1356,19 @@ def test_result_batch_frames_default_to_object_reads_without_temp_group(make_mod
     ]
     assert h.called("GroupDef.SetGroup") == []
     assert h.called("GroupDef.Delete") == []
+
+
+def test_result_batch_treats_string_frames_as_one_name(make_model) -> None:
+    h = make_model(
+        {
+            **_selected_output_responses(),
+            "FrameObj.GetNameList": (1, ("F1",), 0),
+            "Results.FrameForce": _frame_force_result("F1"),
+        }
+    )
+    tables = h.model.results.batch().frame_forces(frames="F1").collect()
+    assert tables["frame_forces"]["frame"] == ("F1",)
+    assert h.called("Results.FrameForce") == [("F1", int(ItemTypeElm.OBJECT_ELM))]
 
 
 def test_result_batch_rejects_missing_frame_target_before_read(make_model) -> None:

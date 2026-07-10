@@ -15,12 +15,19 @@ from sap2000py.discovery import (
     _format_version,
     _installation,
     _major,
+    _version_key,
 )
 
 
 def test_major_parses_first_version_segment() -> None:
     assert _major("25.3.1") == 25
     assert _major("v26.0") == 26
+
+
+def test_major_ignores_embedded_product_name() -> None:
+    # DisplayVersion registry entries often carry a product-name prefix.
+    assert _major("SAP2000 v25.3.0") == 25
+    assert _major("SAP2000v25.3.0") == 25
 
 
 def test_format_version_formats_and_trims_version_segments() -> None:
@@ -80,6 +87,22 @@ def test_discover_sorts_longer_patch_version_before_shared_prefix() -> None:
     discovered = _discover(candidates)
 
     assert [item.version for item in discovered] == ["25.1.1", "25.1"]
+
+
+def test_discover_ignores_product_prefix_when_sorting_versions() -> None:
+    candidates = [
+        Installation(version="SAP2000 v25.1", major=25, path=Path("C:/SAP251/SAP2000.exe")),
+        Installation(version="25.3", major=25, path=Path("C:/SAP253/SAP2000.exe")),
+    ]
+
+    discovered = _discover(candidates)
+
+    assert [item.version for item in discovered] == ["25.3", "SAP2000 v25.1"]
+    assert _major("SAP2000 v25.1") == 25
+
+
+def test_version_key_preserves_non_prefix_2000_segment() -> None:
+    assert _version_key("20.0.2000") == (20, 0, 2000)
 
 
 def test_discover_prefers_known_version_for_same_executable_path() -> None:

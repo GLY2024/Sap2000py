@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from ..errors import SapAnalysisError, SapError
 from ..handles import Handle
-from ._base import Manager
+from ._base import Manager, _as_tuple
 
 # SAP2000 case-status codes from Analyze.GetCaseStatus.
 _STATUS = {1: "not run", 2: "could not start", 3: "not finished", 4: "finished"}
@@ -28,7 +28,7 @@ class AnalysisReport:
 class Analysis(Manager[Handle]):
     """Control and run the analysis. Wraps ``cAnalyze``."""
 
-    def set_run_flags(self, cases: Sequence[str] | None = None, *, run: bool = True) -> None:
+    def set_run_flags(self, cases: str | Iterable[str] | None = None, *, run: bool = True) -> None:
         """Choose which load cases run.
 
         ``cases=None`` sets every case to ``run``. Otherwise all cases are first
@@ -40,10 +40,11 @@ class Analysis(Manager[Handle]):
                 self._raw.Analyze.SetRunCaseFlag, "", run, True, api_name="Analyze.SetRunCaseFlag"
             )
             return
+        normalized_cases = _as_tuple(cases)
         self._g.call(
             self._raw.Analyze.SetRunCaseFlag, "", False, True, api_name="Analyze.SetRunCaseFlag"
         )
-        for case in cases:
+        for case in normalized_cases:
             self._g.call(
                 self._raw.Analyze.SetRunCaseFlag,
                 case,
@@ -64,7 +65,7 @@ class Analysis(Manager[Handle]):
             for name, code in zip(names, statuses, strict=False)
         }
 
-    def run(self, *, cases: Sequence[str] | None = None) -> AnalysisReport:
+    def run(self, *, cases: str | Iterable[str] | None = None) -> AnalysisReport:
         """Set run flags, run the analysis, and verify the requested cases finished.
 
         Raises :class:`~sap2000py.errors.SapAnalysisError` if any requested case
@@ -74,6 +75,9 @@ class Analysis(Manager[Handle]):
         files alongside the ``.sdb`` — otherwise a clear error is raised instead
         of SAP2000's opaque status code.
         """
+        normalized_cases = _as_tuple(cases) if cases is not None else None
+        if normalized_cases is not None and not normalized_cases:
+            raise ValueError("cases=[] would run no case; pass cases=None to run every case.")
         filename = self._g.value(self._raw.GetModelFilename, api_name="GetModelFilename")
         if not filename:
             raise SapError(
@@ -81,10 +85,10 @@ class Analysis(Manager[Handle]):
                 "(use model.files.save(path)); SAP2000 writes analysis files "
                 "alongside the .sdb."
             )
-        self.set_run_flags(cases)
+        self.set_run_flags(normalized_cases)
         self._g.call(self._raw.Analyze.RunAnalysis, api_name="Analyze.RunAnalysis")
         status = self.case_status()
-        requested = set(cases) if cases is not None else set(status)
+        requested = set(normalized_cases) if normalized_cases is not None else set(status)
         failed = {
             name: state
             for name, state in status.items()
